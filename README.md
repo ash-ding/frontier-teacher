@@ -156,9 +156,11 @@ python src/profile_report.py --records outputs/llama32-3b__mathtrain.records.jso
 python src/make_subsets.py --model llama32-3b
 ```
 
-Both builders assert on their output — 30 AIME problems per year, every AIME
-answer an integer 0–999, and zero overlap between the training pool and MATH-500.
-A build that would contaminate the eval set fails instead of producing files.
+Every builder asserts on its output — 30 AIME problems per year with integer
+answers 0–999, the HMMT per-competition counts and mutual disjointness, the
+7,498 / 4,498 training-pool partition, and zero overlap between the training
+pool and MATH-500. A build that would contaminate the eval set fails instead of
+producing files.
 
 ## Layout
 
@@ -203,7 +205,8 @@ these usable for reasoning about training cutoffs, not just about difficulty.
 | `math500.jsonl` | MATH-500 | 500 | `HuggingFaceH4/MATH-500` — the problems Lightman et al. held out of the original MATH *test* split for PRM800K. |
 | `aime_2020.jsonl` … `aime_2024.jsonl` | AIME, one file per year | 30 each, 150 total | `di-zhang-fdu/AIME_1983_2024` for 2020–21, `AI-MO/aimo-validation-aime` for 2022–24. |
 | `hmmt_feb_2025.jsonl`, `hmmt_nov_2025.jsonl`, `hmmt_feb_2026.jsonl` | HMMT | 30 / 30 / 33, 93 total | MathArena. |
-| `math_train_12k.jsonl` | MATH train pool | 11,996 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. |
+| `math_train_orig_train.jsonl` | MATH train pool, original-train half | 7,498 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. |
+| `math_train_orig_test.jsonl` | MATH train pool, original-test half | 4,498 | Same upstream; these were moved out of the original MATH *test* split by the PRM800K re-split. |
 
 A task reads either one file (`data_file`) or several concatenated in order
 (`data_files`), so the `aime` task spans all five years while the years stay
@@ -225,6 +228,20 @@ which is why the training pool and the eval set are disjoint by construction.
 The benchmark records under `results/` predate the per-year split and use the
 earlier flat `aime-<nnnn>` ids. They carry the full problem text, so they still
 join to the current files on that.
+
+### Why the training pool is split in two
+
+The 11,996-problem pool is stored as two files because the halves are not
+interchangeable. 7,498 problems come from the original Hendrycks *train* split;
+4,498 were moved out of the original *test* split by the PRM800K re-split. A
+model may have been exposed to the first and not the second — Llama-3.2-3B
+demonstrably was — in which case only the test-derived half measures reasoning
+rather than recall. Each record carries `split_origin`, computed at build time.
+
+Problem ids (`mathtrain-00000` … `mathtrain-11995`) are assigned over the pool as
+a whole in upstream order, *before* the split, so they run across both files
+rather than restarting in each. Existing profiling records and curated subsets
+reference these ids; the numbering is verified stable across the partition.
 
 ### HMMT
 
