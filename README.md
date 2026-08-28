@@ -85,8 +85,20 @@ cutoff, or a verbatim-continuation probe. Neither has been run.
 ```bash
 git clone <this-repo> frontier-teacher
 cd frontier-teacher
-./scripts/setup_env.sh          # idempotent: miniforge -> conda env -> vLLM
+./scripts/setup_env.sh          # idempotent: miniforge -> conda env -> requirements.txt
 conda activate frontier-teacher
+```
+
+For the exact pinned set instead of a fresh resolution:
+
+```bash
+LOCK=1 ./scripts/setup_env.sh
+```
+
+Or without the script, if conda is already present:
+
+```bash
+conda env create -f environment.yml && conda activate frontier-teacher
 ```
 
 `setup_env.sh` is safe to re-run on a node that is already provisioned; it skips
@@ -94,22 +106,36 @@ each step that is already satisfied.
 
 ### Dependencies
 
-Installed by `setup_env.sh`, pinned where the pin matters:
+Three files, for three different needs:
+
+| File | Use it when |
+|---|---|
+| `requirements.txt` | Normal install. Names the 8 direct dependencies at the versions this was verified on, and lets pip resolve the rest against the local CUDA. |
+| `requirements.lock.txt` | Exact reproduction. The full 207-package resolved set, captured with `pip freeze` from a working node. |
+| `environment.yml` | `conda env create -f environment.yml`. Takes python from conda and everything else from `requirements.txt`. |
 
 | Package | Version | Why |
 |---|---|---|
 | `python` | 3.12 | |
-| `vllm` | **0.27.1** (pinned) | Batch inference engine. Pulls a matching `torch` (2.13.0+cu130). |
-| `math-verify[antlr4_13_2]` | 0.9.0 | Symbolic answer equivalence for MATH. The `antlr4_13_2` extra is required — without it LaTeX parsing silently degrades. |
-| `datasets` | 5.x | Dataset loading. |
-| `transformers` | 5.x | Tokenizer and chat templates. |
-| `accelerate`, `pandas`, `tabulate`, `pyyaml` | — | Support. |
+| `vllm` | **0.27.1** | Batch inference engine. Selects a CUDA-matched `torch` (2.13.0+cu130 here). |
+| `math-verify[antlr4_13_2]` | 0.9.0 | Symbolic answer equivalence — MATH and HMMT answers are exact forms, not integers. |
+| `datasets` | 5.0.1 | Dataset loading. |
+| `transformers` | 5.16.1 | Tokenizers and chat templates. |
+| `accelerate`, `pandas`, `tabulate`, `PyYAML` | — | Support. |
 
-Only `vllm` is version-pinned. It selects the CUDA-matched `torch` build, and
-mixing an independently chosen `torch` with vLLM is the usual way this environment
-breaks.
+Two of these pins are load-bearing rather than cautious.
 
-Verify:
+**`vllm` must be installed first and alone.** It selects the CUDA-matched `torch`
+build; installing `torch` yourself, or letting a later resolution step move it,
+is the usual way this environment breaks. `setup_env.sh` installs `vllm` on its
+own before the rest for exactly this reason.
+
+**`math-verify` needs the `antlr4_13_2` extra.** Without it the LaTeX parser
+degrades *silently* — it does not raise, it just fails to parse and depresses
+every score. A grading path that fails quietly is worse than one that crashes,
+because the result still looks like a number.
+
+Verify an install:
 
 ```bash
 python -c "import vllm, torch; print(vllm.__version__, torch.__version__)"
@@ -165,6 +191,9 @@ producing files.
 ## Layout
 
 ```
+requirements.txt        Direct dependencies.
+requirements.lock.txt   Full resolved set, for exact reproduction.
+environment.yml         conda env spec.
 configs/          One YAML per model configuration: weights, decoding preset,
                   and per-task sample counts and token budgets.
 data/

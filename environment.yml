@@ -1,0 +1,13 @@
+# conda env create -f environment.yml
+#
+# Only python comes from conda; everything else is pip, because vllm ships CUDA
+# wheels that conda-forge does not mirror and mixing the two resolvers is how
+# the torch/vllm pairing gets broken.
+name: frontier-teacher
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - -r requirements.txt

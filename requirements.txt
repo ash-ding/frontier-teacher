@@ -1,0 +1,20 @@
+# Direct dependencies. Versions are the ones this project was verified on
+# (see requirements.lock.txt for the full resolved set).
+#
+# vllm is the only hard pin, and it is a real constraint rather than caution:
+# it selects a CUDA-matched torch build (2.13.0+cu130 here). Installing torch
+# separately, or letting pip resolve a different vllm, is the usual way this
+# environment breaks. Install vllm FIRST and let it bring torch in.
+vllm==0.27.1
+
+# Symbolic answer equivalence for MATH and HMMT, whose answers are exact forms
+# rather than integers. The antlr4_13_2 extra is required - without it the LaTeX
+# parser degrades silently and depresses scores rather than raising.
+math-verify[antlr4_13_2]==0.9.0
+
+datasets==5.0.1
+transformers==5.16.1
+accelerate==1.14.0
+pandas==3.0.5
+tabulate==0.10.0
+PyYAML==6.0.3
