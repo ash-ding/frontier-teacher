@@ -21,7 +21,8 @@ from pathlib import Path
 
 from datasets import load_dataset
 
-OUT = Path(__file__).parent
+OUT = Path(__file__).parent / "benchmark"
+OUT.mkdir(parents=True, exist_ok=True)
 
 SETS = [
     ("hmmt_feb_2025", "MathArena/hmmt_feb_2025", "HMMT February 2025", 30),

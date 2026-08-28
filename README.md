@@ -169,7 +169,10 @@ configs/          One YAML per model configuration: weights, decoding preset,
                   and per-task sample counts and token budgets.
 data/
   build_*.py      Dataset builders (assertions included).
-  subsets/        Curated training subsets, sliced by measured difficulty.
+  benchmark/      Held-out evaluation sets: MATH-500, AIME, HMMT.
+  training_set/   The MATH training pool, split by original provenance.
+  further_improve/  Curated subsets sliced by measured difficulty - the pool
+                  teacher-student experiments draw from.
 src/
   evaluate.py     vLLM generation + scoring for one (config, task) pair.
                   Supports --shard/--num-shards for multi-GPU splitting.
@@ -192,6 +195,15 @@ outputs/          Where evaluate.py writes and where results live - one
 
 ## Datasets
 
+`data/` is split by what the data is *for*, since the three roles must never be
+confused with one another:
+
+| Directory | Role |
+|---|---|
+| `benchmark/` | Held-out evaluation. Never trained on. MATH-500, AIME, HMMT. |
+| `training_set/` | The pool experiments train on, split by original provenance. |
+| `further_improve/` | Curated subsets drawn from that pool by measured difficulty. |
+
 **The data files are tracked in this repository, not fetched at run time.** What a
 score means depends on exactly which problems were scored, so the problem set is
 pinned rather than left to an upstream that may revise it. The builders in `data/`
@@ -203,11 +215,11 @@ these usable for reasoning about training cutoffs, not just about difficulty.
 
 | File(s) | Set | Problems | Source |
 |---|---|---:|---|
-| `math500.jsonl` | MATH-500 | 500 | `HuggingFaceH4/MATH-500` — the problems Lightman et al. held out of the original MATH *test* split for PRM800K. |
-| `aime_2020.jsonl` … `aime_2024.jsonl` | AIME, one file per year | 30 each, 150 total | `di-zhang-fdu/AIME_1983_2024` for 2020–21, `AI-MO/aimo-validation-aime` for 2022–24. |
-| `hmmt_feb_2025.jsonl`, `hmmt_nov_2025.jsonl`, `hmmt_feb_2026.jsonl` | HMMT | 30 / 30 / 33, 93 total | MathArena. |
-| `math_train_orig_train.jsonl` | MATH train pool, original-train half | 7,498 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. |
-| `math_train_orig_test.jsonl` | MATH train pool, original-test half | 4,498 | Same upstream; these were moved out of the original MATH *test* split by the PRM800K re-split. |
+| `benchmark/math500.jsonl` | MATH-500 | 500 | `HuggingFaceH4/MATH-500` — the problems Lightman et al. held out of the original MATH *test* split for PRM800K. |
+| `benchmark/aime_2020.jsonl` … `aime_2024.jsonl` | AIME, one file per year | 30 each, 150 total | `di-zhang-fdu/AIME_1983_2024` for 2020–21, `AI-MO/aimo-validation-aime` for 2022–24. |
+| `benchmark/hmmt_*.jsonl` (3 files) | HMMT | 30 / 30 / 33, 93 total | MathArena. |
+| `training_set/math_train_orig_train.jsonl` | MATH train pool, original-train half | 7,498 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. |
+| `training_set/math_train_orig_test.jsonl` | MATH train pool, original-test half | 4,498 | Same upstream; these were moved out of the original MATH *test* split by the PRM800K re-split. |
 
 A task reads either one file (`data_file`) or several concatenated in order
 (`data_files`), so the `aime` task spans all five years while the years stay
@@ -215,8 +227,9 @@ separate on disk:
 
 ```yaml
 aime: {n: 8, max_tokens: 4096, max_model_len: 8192,
-       data_files: [aime_2020.jsonl, aime_2021.jsonl, aime_2022.jsonl,
-                    aime_2023.jsonl, aime_2024.jsonl]}
+       data_files: [benchmark/aime_2020.jsonl, benchmark/aime_2021.jsonl,
+                    benchmark/aime_2022.jsonl, benchmark/aime_2023.jsonl,
+                    benchmark/aime_2024.jsonl]}
 ```
 
 AIME has to be assembled from two upstreams because no single public set covers
@@ -254,9 +267,9 @@ a known date.
 
 | File | Competition | Problems | Integer answers |
 |---|---|---:|---:|
-| `data/hmmt_feb_2025.jsonl` | February 2025 | 30 | 14 |
-| `data/hmmt_nov_2025.jsonl` | November 2025 | 30 | 21 |
-| `data/hmmt_feb_2026.jsonl` | February 2026 | 33 | 16 |
+| `benchmark/hmmt_feb_2025.jsonl` | February 2025 | 30 | 14 |
+| `benchmark/hmmt_nov_2025.jsonl` | November 2025 | 30 | 21 |
+| `benchmark/hmmt_feb_2026.jsonl` | February 2026 | 33 | 16 |
 | | **total** | **93** | **51** |
 
 Unlike the other benchmarks here these files are committed rather than rebuilt on
@@ -278,7 +291,7 @@ The data is redistributed from MathArena under CC BY-NC-SA 4.0.
 
 ## Curated subsets
 
-`data/subsets/<model>/`, one JSONL per difficulty band. Filenames encode the
+`data/further_improve/<model>/`, one JSONL per difficulty band. Filenames encode the
 model, the pass@1 band, and the sample count.
 
 **Llama-3.2-3B** — drawn from the 4,498 clean problems, profiled at 32 samples

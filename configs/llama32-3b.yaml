@@ -7,6 +7,6 @@ seed: 1234
 tensor_parallel_size: 1
 gpu_memory_utilization: 0.90
 tasks:
-  math500: {n: 4, max_tokens: 4096, max_model_len: 8192}
-  aime:    {n: 8, max_tokens: 4096, max_model_len: 8192, data_files: [aime_2020.jsonl, aime_2021.jsonl, aime_2022.jsonl, aime_2023.jsonl, aime_2024.jsonl]}
-  mathtrain: {n: 32, max_tokens: 4096, max_model_len: 8192, data_files: [math_train_orig_train.jsonl, math_train_orig_test.jsonl], integer_answer: false}
+  math500: {n: 4, max_tokens: 4096, max_model_len: 8192, data_file: benchmark/math500.jsonl}
+  aime:    {n: 8, max_tokens: 4096, max_model_len: 8192, data_files: [benchmark/aime_2020.jsonl, benchmark/aime_2021.jsonl, benchmark/aime_2022.jsonl, benchmark/aime_2023.jsonl, benchmark/aime_2024.jsonl]}
+  mathtrain: {n: 32, max_tokens: 4096, max_model_len: 8192, data_files: [training_set/math_train_orig_train.jsonl, training_set/math_train_orig_test.jsonl], integer_answer: false}

@@ -11,7 +11,8 @@ from pathlib import Path
 
 from datasets import load_dataset
 
-OUT = Path(__file__).parent
+OUT = Path(__file__).parent / "benchmark"
+OUT.mkdir(parents=True, exist_ok=True)
 
 
 def build_math500():

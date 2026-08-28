@@ -26,7 +26,9 @@ from pathlib import Path
 
 from datasets import concatenate_datasets, load_dataset
 
-OUT = Path(__file__).parent
+OUT = Path(__file__).parent / "training_set"
+OUT.mkdir(parents=True, exist_ok=True)
+BENCH = Path(__file__).parent / "benchmark"
 CONFIGS = ["algebra", "counting_and_probability", "geometry", "intermediate_algebra",
            "number_theory", "prealgebra", "precalculus"]
 
@@ -57,7 +59,7 @@ for r in ds:
     })
 
 # the eval set must never be reachable from the training pool
-m500 = {norm(json.loads(l)["problem"]) for l in (OUT / "math500.jsonl").open()}
+m500 = {norm(json.loads(l)["problem"]) for l in (BENCH / "math500.jsonl").open()}
 overlap = sum(1 for r in rows if norm(r["problem"]) in m500)
 assert overlap == 0, f"CONTAMINATION: {overlap} training problems appear in MATH-500"
 

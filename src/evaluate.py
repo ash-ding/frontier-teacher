@@ -48,7 +48,7 @@ def main():
 
     # a task reads one file (data_file) or several concatenated in order
     # (data_files) - the latter lets a multi-year benchmark stay split on disk
-    names = task.get("data_files") or [task.get("data_file", f"{args.task}.jsonl")]
+    names = task.get("data_files") or [task.get("data_file", f"benchmark/{args.task}.jsonl")]
     data_files = [ROOT / "data" / n for n in names]
     for p_ in data_files:
         if not p_.exists():
