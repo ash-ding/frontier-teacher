@@ -14,9 +14,13 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--config", required=True)
 ap.add_argument("--task", required=True)
 ap.add_argument("--out", default=str(ROOT / "outputs"))
+ap.add_argument("--name", default="", help="override cfg['name'] - must match the "
+                "--name the shards were produced under, e.g. a checkpoint tag")
 a = ap.parse_args()
 
 cfg = yaml.safe_load(open(a.config))
+if a.name:
+    cfg["name"] = a.name
 task_cfg = cfg["tasks"][a.task]
 base = f"{cfg['name']}__{a.task}"
 outdir = Path(a.out) / task_cfg.get("out_subdir", "")
