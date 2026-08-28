@@ -41,52 +41,28 @@ sampling cannot. Do not put them in a plain GRPO run and expect anything.
 
 ---
 
-## 2. Contamination: run the discriminating experiment
-
-`docs/experiment.md` §3 establishes that the provenance test is *differential*
-and cannot see uniform exposure. Both Qwen configurations pass it, which is the
-absence of differential evidence rather than evidence of absence — and a 4B model
-scoring 95% on every split of MATH is exactly the case where that distinction
-matters.
-
-Two independent probes. Either alone is suggestive; together they are close to
-decisive.
-
-- [ ] **Post-cutoff benchmark.** `MathArena/aime_2026`: 30 problems, all integer
-      answers, zero integration cost against the existing AIME task. Qwen3's
-      technical report is May 2025, so AIME 2026 (February 2026) is unambiguously
-      after. Compare against AIME 2024 and HMMT Feb 2025 on the same models. A
-      sharp drop is contamination evidence; parity weakens the hypothesis.
-- [ ] **Verbatim-continuation probe.** Feed the first ~40% of a problem statement
-      and measure overlap between the continuation and the true remainder, against
-      a control set the model cannot have seen. This tests *exposure* directly and
-      is independent of solving ability — a model that has not seen the text
-      cannot reproduce it regardless of how good it is at math.
-
-**Statistical limit, and it binds hard.** The standard error is set by the
-problem count; extra sampling does not move it. At 30 problems it is ±8.9 points
-around a 50% score, so two single competitions are distinguishable only past
-roughly 30 points — larger than the 20.7-point effect measured on Llama. Any
-date comparison must pool: HMMT Feb 2026 (33) + AIME 2026 (30) = 63 post-cutoff
-against HMMT Feb 2025 (30) + HMMT Nov 2025 (30) + AIME 2024 (30) = 90 before.
-Even pooled this resolves roughly 15 points, not 5.
-
----
-
-## 3. Run HMMT
+## 2. Run HMMT
 
 Configured and grading-calibrated; never executed.
 
+Its value is as a **second out-of-domain generalisation set** for a trained
+student. The reference work used AIME 2020–2024 for exactly this; HMMT is harder
+and independent of it, so a gain that shows on both is more convincing than one
+that shows on either alone.
+
 - [ ] Run `hmmt` (93 problems pooled) on all three configurations, 16 samples,
-      pass@4 headline. Also gives pass@1/@8/@16 from the same run.
-- [ ] Run the three per-competition tasks for the date comparison in §2.
+      pass@4 headline. The same run yields pass@1/@8/@16.
+- [ ] Re-run on the GRPO checkpoint once §1 produces one.
 
 Cheap: 93 problems × 16 samples. Thinking mode is the long pole at ~30k tokens
-per sample; shard it across 8 GPUs as with the profiling runs.
+per sample; shard across 8 GPUs as with the profiling runs.
 
 ---
 
-## 4. Save the benchmark generations
+The three per-competition tasks (`hmmt_feb_2025`, `hmmt_nov_2025`,
+`hmmt_feb_2026`) exist for the date comparison in §6 and are not needed for this.
+
+## 3. Save the benchmark generations
 
 `run_all.sh` never passed `--save-generations`, so the reasoning traces behind
 the six baseline runs were never written — the per-sample verdicts in `outputs/`
@@ -97,11 +73,11 @@ are all that survives. This is not a missing file; it is data that does not exis
 
 Needed before any error analysis, and before using teacher trajectories for
 distillation — the premise of that work is that *the trajectory* is what the
-student learns from, which correct/incorrect labels cannot supply.
+student learns from, which a correct/incorrect label cannot supply.
 
 ---
 
-## 5. Re-profile the zero-gradient problems at higher n
+## 4. Re-profile the zero-gradient problems at higher n
 
 Both Qwen configurations have problems that are never solved in 8 samples: 779
 for non-thinking, 295 for thinking. At `p = 0` they contribute no gradient, but
@@ -112,12 +88,13 @@ weight into exactly the hard, trainable problems this project wants.
       ~10 min for non-thinking, ~1 h for thinking, against 1.5 h and 20 h for a
       full-pool re-profile.
 
-Worth doing only if the Qwen configurations are wanted as students. As teachers
-their pass@1 is what matters, and that is already measured.
+Low value now. Qwen serves only as a reference point — not as the student, and
+not as the teacher — and a reference point's pass@1 is already measured. Worth
+revisiting only if a Qwen configuration is wanted as a training target after all.
 
 ---
 
-## 6. Robustness and hygiene
+## 5. Robustness and hygiene
 
 Smaller items, each closing a real gap rather than tidying.
 
@@ -138,13 +115,55 @@ Smaller items, each closing a real gap rather than tidying.
 
 ---
 
+## 6. Contamination: run the discriminating experiment — deprioritised
+
+`docs/experiment.md` §3 establishes that the provenance test is *differential*:
+it detects contamination that is asymmetric across splits, which is what
+Llama shows, and is blind to uniform exposure. Both Qwen configurations pass it,
+which is the absence of differential evidence rather than evidence of absence.
+
+**This was near the top of the plan while Qwen3-4B was a candidate teacher.** It
+no longer is, and that removes the reason that made it urgent. The concern was
+specific: if a teacher's solutions are recalled rather than derived, its
+trajectories can be post-hoc rationalisations of a known answer — correct, fluent,
+and containing exactly the unexplainable jumps that make a trace unlearnable.
+The teacher's own metrics would look fine while the student failed to improve,
+and no downstream number would separate that from the method not working.
+
+With Qwen serving only as a reference point, what remains is weaker: any
+capability claim made about it (*"Qwen3-4B reaches 95.5% on MATH-500"*) is
+misleading if the number is recall. That is worth settling before publication,
+not before training.
+
+If it is run later, the two probes are independent:
+
+- [ ] **Verbatim-continuation probe.** Feed the first ~40% of a problem statement
+      and measure overlap between the continuation and the true remainder, against
+      a control the model cannot have seen. Tests *exposure* directly, independent
+      of solving ability, and can run over all 11,996 problems rather than 30 — far
+      more statistical power than the temporal comparison, and cheaper, since it
+      needs no long reasoning.
+- [ ] **Post-cutoff benchmark.** `MathArena/aime_2026`: 30 problems, all integer
+      answers, zero integration cost. Cheap enough to run alongside anything else,
+      but see the limit below before reading much into it.
+
+**Why the temporal probe alone would not settle it.** The standard error is set
+by the problem count and extra sampling does not move it: ±8.9 points at 30
+problems, so two single competitions are distinguishable only past roughly 30
+points — larger than the 20.7-point effect measured on Llama. Pooling HMMT Feb
+2026 (33) + AIME 2026 (30) against HMMT Feb 2025 (30) + HMMT Nov 2025 (30) +
+AIME 2024 (30) gets that to about 15 points. A sharp drop would be strong
+evidence; parity would prove very little. Prefer the continuation probe.
+
+---
+
 ## Not planned
 
 Recorded so the decisions are not revisited by accident.
 
 **Qwen3-4B as the student.** Ruled out on headroom: 95.5% on MATH-500 in thinking
-mode, and 92.9% of the training pool produces no gradient. Kept as a reference
-point and a candidate teacher.
+mode, and 92.9% of the training pool produces no gradient. It is kept purely as a
+reference point — it will not be the teacher either.
 
 **A separate RL environment.** One environment evaluates and trains. The apparent
 conflict — `math-verify[antlr4_13_2]` against verl's `hydra-core` pinning antlr4
