@@ -9,30 +9,18 @@ Everything below runs on three 8×H100 nodes under one shared environment
 
 ---
 
-## 1. GRPO training — the actual experiment
+## 1. GRPO training — running
 
-Everything so far is preparation. The question this repository exists to answer
-is whether a frontier model can teach a smaller one, and nothing has been trained
-yet.
+Nine runs (3 configurations × 3 difficulty bands) are in flight; see
+`docs/experiment.md` §7 for the design and for two findings that came out of
+setting it up. Remaining work once they land:
 
-**Student:** Llama-3.2-3B-Instruct. It is the only candidate: 38.8% on MATH-500
-leaves room to move, where Qwen3-4B at 95.5% does not.
-
-**Training pool:** `data/further_improve/llama32-3b/`. The 5–15% band (400
-problems, measured mean pass@1 8.7%) is the closest analogue to the reference
-work's hard subset. The wider `0 < p ≤ 25%` slice of the clean pool holds 1,196
-problems if 400 proves too few to sustain training.
-
-- [ ] Write the verl GRPO config: rollout via vLLM, FSDP training, reward from
-      `src/grading.py` so training and evaluation score identically.
-- [ ] Baseline GRPO run on the hard band. This is the control the teacher has to
-      beat; without it a teacher-side gain is unattributable.
-- [ ] Evaluate the trained checkpoint on MATH-500 and AIME with the existing
-      harness, unchanged, so the numbers join the baseline table directly.
-
-**Design note.** The reward function must be the same code path as evaluation.
-If training rewards and eval scores come from different graders, a gain can come
-from the grader rather than the model, and nothing downstream distinguishes them.
+- [ ] `src/collect_curves.py` over all nine, then the 3×3 figure — one row per
+      benchmark, one column per configuration, three band lines per panel, with
+      the §1 baseline as each line's rollout = 0 point.
+- [ ] Verify each line's rollout = 0 point equals the §1 baseline. If it does
+      not, training and evaluation are not scoring the same thing.
+- [ ] Fold the completed numbers into `docs/experiment.md` §7.
 
 **Watch for:** the p = 0 and p = 1 sets exist precisely because plain GRPO cannot
 use them — they normalise to zero advantage. They are there for teacher-side
@@ -41,43 +29,18 @@ sampling cannot. Do not put them in a plain GRPO run and expect anything.
 
 ---
 
-## 2. Run HMMT
+## 2. Teacher-side training — the actual experiment
 
-Configured and grading-calibrated; never executed.
+§1 is the control: plain GRPO, no teacher. Nothing in the repository has yet used
+a frontier model's trajectories, which is the question it exists to answer.
 
-Its value is as a **second out-of-domain generalisation set** for a trained
-student. The reference work used AIME 2020–2024 for exactly this; HMMT is harder
-and independent of it, so a gain that shows on both is more convincing than one
-that shows on either alone.
-
-- [ ] Run `hmmt` (93 problems pooled) on all three configurations, 16 samples,
-      pass@4 headline. The same run yields pass@1/@8/@16.
-- [ ] Re-run on the GRPO checkpoint once §1 produces one.
-
-Cheap: 93 problems × 16 samples. Thinking mode is the long pole at ~30k tokens
-per sample; shard across 8 GPUs as with the profiling runs.
+- [ ] Decide what the teacher supplies — full trajectories, hints, or a curriculum
+      over the bands — and which of the nine control curves each variant is
+      measured against.
 
 ---
 
-The three per-competition tasks (`hmmt_feb_2025`, `hmmt_nov_2025`,
-`hmmt_feb_2026`) exist for the date comparison in §6 and are not needed for this.
-
-## 3. Save the benchmark generations
-
-`run_all.sh` never passed `--save-generations`, so the reasoning traces behind
-the six baseline runs were never written — the per-sample verdicts in `outputs/`
-are all that survives. This is not a missing file; it is data that does not exist.
-
-- [ ] Add `--save-generations` to `run_all.sh`.
-- [ ] Re-run the six baselines with traces saved (~30 min sharded across 8 GPUs).
-
-Needed before any error analysis, and before using teacher trajectories for
-distillation — the premise of that work is that *the trajectory* is what the
-student learns from, which a correct/incorrect label cannot supply.
-
----
-
-## 4. Re-profile the zero-gradient problems at higher n
+## 3. Re-profile the zero-gradient problems at higher n
 
 Both Qwen configurations have problems that are never solved in 8 samples: 779
 for non-thinking, 295 for thinking. At `p = 0` they contribute no gradient, but
@@ -94,7 +57,7 @@ revisiting only if a Qwen configuration is wanted as a training target after all
 
 ---
 
-## 5. Robustness and hygiene
+## 4. Robustness and hygiene
 
 Smaller items, each closing a real gap rather than tidying.
 
@@ -108,14 +71,18 @@ Smaller items, each closing a real gap rather than tidying.
       no error and no visibility from the other nodes. Any backup to `~/data`
       should verify by reading back from a different node (allow 90s for
       propagation).
-- [ ] **Report the environment migration numbers in the results table.** The
-      shared environment was validated by re-running Llama on MATH-500: 39.1%
-      against 38.8%, inside the ±1.7 standard error. That evidence currently
-      lives only in a commit message.
+- [ ] **Disable auto-resume everywhere else it could bite.** `run_grpo.sh` now
+      sets `resume_mode=disable`, but any future trainer entry point inherits
+      verl's default of resuming from whatever checkpoint directory it finds.
+- [ ] **Strip the redundant FSDP shards at the source.** Every checkpoint is
+      written twice — `model_world_size_*.pt` for resuming and `huggingface/` for
+      loading — 31 GB where 15 GB is used. With resume disabled the shards are
+      dead weight; `checkpoint.save_contents=[hf_model]` drops them. A background
+      janitor currently deletes them after the fact, which is a workaround.
 
 ---
 
-## 6. Contamination: run the discriminating experiment — deprioritised
+## 5. Contamination: run the discriminating experiment — deprioritised
 
 `docs/experiment.md` §3 establishes that the provenance test is *differential*:
 it detects contamination that is asymmetric across splits, which is what

@@ -12,16 +12,28 @@ Decoding uses each vendor's recommended preset at seed 1234.
 
 ## 1. Baselines
 
-Three model configurations on two held-out benchmarks.
+Three model configurations on three held-out benchmarks. These are also the
+rollout = 0 point of every training curve in §7, so they were re-run with
+`--save-generations` and the traces are kept.
 
-| Configuration | MATH-500 pass@1 | AIME 2020–2024 pass@4 | AIME pass@1 |
+| Configuration | MATH-500 pass@1 | AIME 2020–2024 pass@4 | HMMT pass@4 |
 |---|---:|---:|---:|
-| Llama-3.2-3B-Instruct | 38.8% ± 1.7 | 15.3% ± 2.6 | 6.3% |
-| Qwen3-4B non-thinking | 83.3% ± 1.4 | 36.0% ± 3.6 | 21.3% |
-| Qwen3-4B thinking | 95.5% ± 0.8 | 80.6% ± 3.0 | 67.3% |
+| Llama-3.2-3B-Instruct | 38.8% ± 1.7 | 15.3% ± 2.6 | 1.8% ± 1.1 |
+| Qwen3-4B non-thinking | 83.4% ± 1.4 | 36.0% ± 3.6 | 20.5% ± 3.7 |
+| Qwen3-4B thinking | 95.9% ± 0.8 | 81.0% ± 3.0 | 57.0% ± 4.7 |
 
 MATH-500: 4 samples per problem, pass@1 as the mean.
 AIME: 8 samples, pass@4 via the unbiased estimator (Chen et al., 2021).
+HMMT: 93 problems pooled over Feb 2025 / Nov 2025 / Feb 2026, 16 samples.
+
+**HMMT does not resolve anything for Llama.** 1.8% pass@4 is 1.7 problems out of
+93; the ±1.1 error bar reaches the floor. Any Llama gain on HMMT would have to be
+enormous to clear noise, so for the student model HMMT is reported for
+completeness and MATH-500 carries the signal. It separates the two Qwen
+configurations well (20.5% against 57.0%), which is what it was added for.
+
+The secondary metrics from the same runs: AIME pass@1 is 6.3% / 21.3% / 68.9%,
+and HMMT pass@1 is 0.7% / 11.8% / 43.5%.
 
 **Two checks against the reference work.** Llama-3.2-3B lands on 38.8% where the
 Pedagogical RL blog states 38%, which says the grading path is calibrated rather
@@ -267,15 +279,11 @@ equally so for every model.
 
 ## 6. What has not been run
 
-- **HMMT.** Configured (`hmmt` over all 93, plus one task per competition) and
-  grading-calibrated, but not executed.
-- **Teacher-side training.** No GRPO run yet. The environment is in place —
-  verl 0.9.0 with flash-attn built against CUDA 13.2 on all three nodes.
 - **A post-cutoff contamination test.** The discriminating experiment described
   in §3. `MathArena/aime_2026` is the cheapest starting point: 30 problems, all
   integer answers, zero integration cost against the existing AIME task.
-- **Benchmark generations.** Would require re-running the six baseline jobs with
-  `--save-generations`.
+- **Teacher-side training.** §7 is plain GRPO — the control that a teacher has to
+  beat. Nothing has yet used a frontier model's trajectories.
 
 ### A statistical limit worth stating before HMMT runs
 
@@ -284,3 +292,74 @@ sampling moves it. At 30 problems it is ±8.9 points around a 50% score, so two
 single competitions can only be distinguished if they differ by roughly 30 points
 — larger than the 20.7-point contamination effect measured on Llama. Any
 date-based comparison has to pool competitions to have the power to see anything.
+
+---
+
+## 7. GRPO across difficulty bands
+
+Nine runs: three model configurations × three bands of measured pass@1 (low but
+not zero, ~50%, high but not one). Each run is 20 optimisation steps consuming
+512 rollouts per step, so all nine sit on a shared x-axis of 10,240 student
+rollouts, with checkpoints every 5 steps evaluated on all three benchmarks by
+the unchanged `src/evaluate.py`.
+
+**Group size follows the band.** A GRPO group whose G rollouts are all wrong (or
+all right) has zero advantage and contributes no gradient; the wasted fraction is
+`(1-p)^G + p^G`. At the bands' measured means that is 48.3% for G=8 on a p≈8.7%
+band but under 1% at p≈50%, so the extreme bands use G=32 and the middle band
+G=8. Train batch is set against G to hold 512 rollouts/step (16×32 and 64×8),
+with the mini-batch at half of it — two gradient updates per step.
+
+**This is a pilot, not a converged comparison.** 20 steps is where standard GRPO
+recipes use hundreds. It answers "does the curve move, and does it move
+differently by band", nothing stronger. The thinking middle band is thinner
+still: 200 problems over 20 steps is 6.4 epochs, so a rise there is as plausibly
+memorisation of 200 items as learning.
+
+### The rollout length cap changes what the reward measures
+
+The first thinking run was capped at 12,288 response tokens while evaluation
+allowed 30,000. That is not a tuning difference. A truncated rollout carries no
+`\boxed{}`, so the reward function scores it 0 regardless of whether the model
+was on its way to a correct answer — the cap becomes part of the objective.
+
+Measured over that run's 20 steps:
+
+| | cap 12,288 | cap 32,768 (step 1) |
+|---|---:|---:|
+| rollouts hitting the cap | 51.9% mean, 31.4% → 60.2% across steps | 0.0% |
+| mean response length | 8,658 → 10,596 | 11,197 |
+| training reward (`critic/score/mean`) | 13.5% mean | 18.0% |
+| the band's measured pass@1 | 18.6% | 18.6% |
+| seconds per step | 389 | 672 |
+| peak memory allocated | 33.5 GB | 43.9 GB |
+
+Two things are visible. The truncation rate *rises* during training — GRPO
+lengthens responses, so an initially tolerable cap tightens under its own
+optimisation. And at 32,768 the training reward lands on the band's independently
+measured pass@1, where at 12,288 it sat 5 points below it; the gap was the cap,
+not the model. All three thinking bands were re-run at 32,768. The 12,288 results
+are kept under `outputs/cap12k_ablation/` as the paired comparison.
+
+Llama (4,096) and non-thinking (8,192) are unchanged — neither generates near its
+cap, and their truncation rates in §1 are 3.2% and 1.5%.
+
+At 32,768 a fixed micro-batch *count* no longer expresses the memory budget: two
+33,792-token sequences in one backward pass is ~2.5× what fit at 12k, while the
+same count wastes the card on a sequence that comes back at 1,700 tokens.
+Thinking therefore batches by token budget, which has the identical worst case —
+one maximal sequence — and packs the short ones densely.
+
+### verl resumes silently, which invalidates a re-run
+
+`trainer.resume_mode` defaults to `auto`: verl scans the checkpoint directory and
+continues from whatever it finds, logging one line about it. Re-running a band
+after an aborted attempt therefore does not re-run it — it resumes the aborted
+attempt at an unknown step, and the resulting cell is not comparable with the
+other eight. Every run now sets `resume_mode=disable` and wipes any stale
+checkpoint directory first. Nine clean runs from the released weights is what the
+shared x-axis assumes.
+
+Nine summaries from one band were produced this way before the default was
+noticed, from checkpoints whose training history could not be established; they
+were discarded rather than plotted.
