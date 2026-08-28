@@ -40,6 +40,26 @@ MODELS = {
             ("pass1_eq_1",     "p = 1",           lambda p: p == 1.0,          131, 100),
         ],
     },
+    "qwen3-4b-think": {
+        "model_id": "Qwen/Qwen3-4B (enable_thinking=true)",
+        "n_samples": 8,
+        "pool": "full",
+        "pool_size": 11996,
+        "pool_note": "full MATH train pool; no differential contamination detected",
+        "sampling": {"temperature": 0.6, "top_p": 0.95, "top_k": 20, "max_tokens": 30000},
+        # Bands group adjacent c/8 values. Thinking collapses the middle of the
+        # distribution - 90.4% of the pool is solved on all 8 samples and every
+        # value from c=1 to c=5 holds under 90 problems - so single points would
+        # be too thin to sample from.
+        "bands": [
+            ("pass1_eq_0",      "p = 0",                lambda p: p == 0.0,             295, 200),
+            ("pass1_12-25pct",  "12.5% <= p <= 25%",    lambda p: 0.125 <= p <= 0.25,   136, 100),
+            ("pass1_37-62pct",  "37.5% <= p <= 62.5%",  lambda p: 0.375 <= p <= 0.625,  235, 200),
+            # the band holds 480 (c=6 is 142, c=7 is 338), so 500 was not available
+            ("pass1_75-87pct",  "75% <= p <= 87.5%",    lambda p: 0.75 <= p <= 0.875,   480, 400),
+            ("pass1_eq_1",      "p = 1",                lambda p: p == 1.0,           10850, 500),
+        ],
+    },
     "qwen3-4b-nothink": {
         "model_id": "Qwen/Qwen3-4B (enable_thinking=false)",
         "n_samples": 8,
