@@ -18,7 +18,7 @@ rollout = 0 point of every training curve in §7, so they were re-run with
 
 | Configuration | MATH-500 pass@1 | AIME 2020–2024 pass@4 | HMMT pass@4 |
 |---|---:|---:|---:|
-| Llama-3.2-3B-Instruct | 38.8% ± 1.7 | 15.3% ± 2.6 | 1.8% ± 1.1 |
+| Llama-3.2-3B-Instruct | 38.8% ± 1.7 | 15.3% ± 2.6 * | 1.8% ± 1.1 |
 | Qwen3-4B non-thinking | 83.4% ± 1.4 | 36.0% ± 3.6 | 20.5% ± 3.7 |
 | Qwen3-4B thinking | 95.9% ± 0.8 | 81.0% ± 3.0 | 57.0% ± 4.7 |
 
@@ -35,11 +35,27 @@ configurations well (20.5% against 57.0%), which is what it was added for.
 The secondary metrics from the same runs: AIME pass@1 is 6.3% / 21.3% / 68.9%,
 and HMMT pass@1 is 0.7% / 11.8% / 43.5%.
 
-**Two checks against the reference work.** Llama-3.2-3B lands on 38.8% where the
+\* A second run of Llama's AIME returned 12.0%. See the variance note below.
+
+**A check against the reference work.** Llama-3.2-3B lands on 38.8% where the
 Pedagogical RL blog states 38%, which says the grading path is calibrated rather
-than silently depressing scores. On AIME the blog reports 22.5% pass@4 for its
-method and describes it as more than a 40% relative gain; the measured baseline
-of 15.3% gives 22.5 / 15.3 = +47%, consistent with that.
+than silently depressing scores.
+
+**AIME has run-to-run variance worth stating before any AIME number is read.**
+Two independent evaluations of the identical model over the identical 150
+problems at n=8 (verified: the problem-text sets have the same md5) returned
+pass@1 6.3% and 4.8%, pass@4 15.3% and 12.0%. A fixed seed does not make this
+reproducible — vLLM's continuous batching changes the numerics with the shard
+layout, and the first run was sharded across 8 GPUs where the second was not.
+So Llama's AIME pass@4 is 12–15%, and a ±3-point move on AIME is the harness,
+not the model. Comparisons against a checkpoint must therefore use a baseline
+run under the same conditions as the checkpoint evaluations, which is what §7
+does; the 8-GPU sharded original is kept in `outputs/superseded/`.
+
+This is also why the curve analyses bootstrap over BOTH problems and
+generations. Resampling problems alone treats each problem's measured c-of-n as
+exact, and at n=8 that is not a safe assumption — it understated the intervals
+on AIME and HMMT by roughly a third.
 
 **Qwen3-4B cannot serve as the student.** At 95.5% on MATH-500 there are 4.5
 points of headroom, so the ~4-point effect the paper reports (44.7% → 48.6%)
