@@ -379,3 +379,40 @@ shared x-axis assumes.
 Nine summaries from one band were produced this way before the default was
 noticed, from checkpoints whose training history could not be established; they
 were discarded rather than plotted.
+
+### What the 32k cap cost, and one cell it broke
+
+Raising the thinking cap fixed the reward but moved the cost elsewhere. Two
+failures followed, both worth recording because they shape how §7's thinking row
+should be read.
+
+**The low thinking band has no 10,240-rollout endpoint.** It ran out of GPU
+memory at step 19 of 20, after five hours, and its step-20 checkpoint does not
+exist. At a 34,816-token micro-batch budget the logits tensor alone is 10.6 GB
+(tokens x 151,936 vocab x 2 bytes), the temperature division makes a second copy,
+and vLLM still held 35.9 GB of the card: 11.63 GB wanted against 11.03 GB free.
+The curve therefore has four points (0 / 2,560 / 5,120 / 7,680) where every other
+cell has five, and its last point is NOT comparable with the others' endpoints.
+Subsequent runs use a tighter token budget and give vLLM 0.45 rather than 0.6.
+
+The failure was unrecoverable rather than a five-step top-up, because the
+background job that reclaims redundant FSDP shards had already deleted the only
+thing that could have resumed from step 15. Stripping them is correct while a run
+is healthy and removes the recovery path when one is not; with `resume_mode`
+disabled that trade is deliberate, but it is a trade.
+
+**Six thinking evaluations were killed and recorded as failures** by a one-hour
+per-job timeout. One evaluation job runs on one GPU; MATH-500 alone is 2,000
+generations at roughly 39 gen/min/GPU for this configuration, and a trained
+checkpoint generates longer than the base model it started from, so the cap was
+simply below the work. Thinking now gets four hours per job. Llama and
+non-thinking never came close to the old limit.
+
+**Length grows with difficulty, so the cap is not neutral across bands.** Mean
+response length over training: 15.7k tokens for the low band against 10.9k for
+the high band, with truncation at 6% and 1.5% respectively. The harder the band,
+the longer the model reasons and the more often it hits the ceiling — so any
+response cap bites hardest on exactly the band whose behaviour the experiment is
+most trying to measure. At 12,288 that bite was 52%; at 32,768 it is 6%, and the
+low band's step-19 OOM is the same phenomenon arriving as a memory failure
+instead of a truncation.
