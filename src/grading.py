@@ -55,6 +55,21 @@ def _int_or_none(s):
     return int(m.group(0)) if m else None
 
 
+def _variants(pred: str):
+    """The prediction, plus rewrites that mean the same thing to a reader.
+
+    \\pm is how a model naturally writes the two roots of a quadratic, but it is
+    one expression where the gold answer is two comma-separated ones, so the
+    symbolic comparator sees a mismatch. Expanding it costs one extra parse and
+    recovers a real correct answer that would otherwise be scored wrong.
+    """
+    yield pred
+    if r"\pm" in pred:
+        yield ", ".join((pred.replace(r"\pm", "+"), pred.replace(r"\pm", "-")))
+    if r"\mp" in pred:
+        yield ", ".join((pred.replace(r"\mp", "-"), pred.replace(r"\mp", "+")))
+
+
 def grade(pred_text: str, gold_answer: str, integer_answer: bool = False):
     """-> (is_correct, extracted_or_None).
 
@@ -71,13 +86,14 @@ def grade(pred_text: str, gold_answer: str, integer_answer: bool = False):
         if pi is not None and gi is not None:
             return pi == gi, pred
 
-    try:
-        g = parse(f"${gold_answer}$")
-        p = parse(f"${pred}$")
-        if g and p and verify(g, p):
-            return True, pred
-    except Exception:
-        pass
+    for candidate in _variants(pred):
+        try:
+            g = parse(f"${gold_answer}$")
+            p = parse(f"${candidate}$")
+            if g and p and verify(g, p):
+                return True, pred
+        except Exception:
+            continue
 
     # last resort: normalized string equality
     norm = lambda s: re.sub(r"[\s${}]|\\left|\\right|\\!|\\,", "", str(s))

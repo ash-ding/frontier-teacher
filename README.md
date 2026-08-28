@@ -33,7 +33,7 @@ Teacher-side training is not in this repository yet.
 |---|---:|---:|---|---|---|
 | MATH-500 | 500 | 4 | **pass@1** | mixed; symbolic compare | measured |
 | AIME 2020–2024 | 150 | 8 | **pass@4** | integers 0–999; exact compare | measured |
-| HMMT (3 competitions) | 93 | 16 | **pass@4** | 51/93 integers, 42 exact forms; symbolic compare | **not yet run** |
+| HMMT (3 competitions) | 93 | 16 | **pass@4** | 51/93 integers, 42 exact forms; symbolic compare | grading calibrated, **not yet run** |
 
 HMMT is also configured per competition — `hmmt_feb_2025`, `hmmt_nov_2025`,
 `hmmt_feb_2026` — so the three dates can be compared against a training cutoff.
@@ -345,19 +345,42 @@ plausible and the exact problem set should stay pinned. `data/build_hmmt.py`
 regenerates them and asserts the per-competition counts, that the three sets are
 mutually disjoint, and that none of the 93 problems appears in MATH-500.
 
-**HMMT is configured but has not been run, and grading is why.** Only 51 of 93
-answers are integers; the rest are exact forms — `\frac{1}{576}`,
-`\frac{9\sqrt{23}}{23}`, `1-\frac{2}{\pi}`, `(3+\sqrt{6})^{-1/3}` — so scoring
-goes through `math_verify` symbolic equivalence rather than the integer
-comparison AIME uses (`integer_answer: false` on every HMMT task). One Feb 2025
-problem carries a comma-separated multi-part answer that the current extractor
-would take as a single string.
+Only 51 of 93 HMMT answers are integers; the rest are exact forms —
+`\frac{1}{576}`, `\frac{9\sqrt{23}}{23}`, `1-\frac{2}{\pi}`,
+`(3+\sqrt{6})^{-1/3}` — so scoring goes through `math_verify` symbolic
+equivalence rather than the integer comparison AIME uses (`integer_answer:
+false` on every HMMT task).
 
-The grading path is calibrated on MATH-500, where it reproduces the published
-38% baseline, but not on these. Until it is, an HMMT score would not be
-separable from a parser artefact — which matters more here than usual, because
-the reason to run HMMT is to compare dates, and a parser that fails differently
-across competitions would look exactly like the effect being tested for.
+### Grading calibration
+
+An HMMT score is only worth reading if the parser can actually read HMMT
+answers, and this matters more here than usual: the reason to run these sets is
+to compare competitions against a training cutoff, and a parser that failed
+differently across competitions would look exactly like the effect being tested
+for. `src/calibrate_grading.py` exercises `grade()` on known inputs — no GPU
+time — so a failure is unambiguously a harness bug rather than a weak model:
+
+| Check | What it catches |
+|---|---|
+| identity | The gold answer, boxed, must grade correct. Below 100% the extractor cannot read this answer format. |
+| equivalence | 28 pairs that are the same value written differently. Failures mean correct answers get marked wrong. |
+| specificity | A sentinel answer must grade **wrong**. Without it, a grader that returns `True` unconditionally passes everything else. |
+| thinking | Identity again behind a `</think>` tag, since thinking models are graded only on what follows it. |
+
+```bash
+python src/calibrate_grading.py --data data/benchmark/hmmt_*.jsonl
+```
+
+All four pass at 100% on MATH-500 (500), AIME (150) and HMMT (93).
+
+Calibration found and fixed one real defect: `\frac{-1\pm\sqrt{17}}{2}` — the
+natural way to write two roots — was graded wrong against a gold of two
+comma-separated values. `grading.py` now expands `\pm` / `\mp` before comparing.
+
+One behaviour is documented rather than fixed: `math_verify` compares
+numerically within a tolerance, so a truncated decimal (`-0.047619047619`)
+matches an exact form (`-\frac{1}{21}`). That makes the grader more permissive,
+equally so for every model.
 
 The data is redistributed from MathArena under CC BY-NC-SA 4.0.
 
