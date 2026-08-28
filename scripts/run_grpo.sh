@@ -55,7 +55,7 @@ mkdir -p "$CKPT" logs
 echo "=== $EXP ==="
 echo "  model=$MODEL  subset=$(basename "$SUB")  problems=$(wc -l < "$SUB")"
 echo "  G=$G  train_batch=$TB  mini_batch=$MB  -> $((TB*G)) rollouts/step, 20 steps = $((TB*G*20))"
-echo "  max_response=$MAXRESP  chat_template_kwargs=$TPLKW  gpus=$NGPU"
+echo "  max_response=$MAXRESP  enable_thinking=${THINK:-n/a}  gpus=$NGPU"
 
 python -m verl.trainer.main_ppo \
   algorithm.adv_estimator=grpo \
