@@ -38,75 +38,75 @@
       }
     },
     {
-      "file": "qwen3-4b-nothink__pass1_eq_25pct__n200.jsonl",
-      "band": "p = 25%",
-      "pool_size": 288,
-      "sampled": 200,
-      "mean_pass_at_1": 0.25,
+      "file": "qwen3-4b-nothink__pass1_12-25pct__n600.jsonl",
+      "band": "12.5% <= p <= 25%",
+      "pool_size": 624,
+      "sampled": 600,
+      "mean_pass_at_1": 0.18270833333333333,
       "level_dist": {
-        "1": 1,
-        "2": 9,
-        "3": 16,
-        "4": 47,
-        "5": 127
+        "1": 9,
+        "2": 31,
+        "3": 60,
+        "4": 133,
+        "5": 367
       },
       "split_origin_dist": {
-        "orig_test": 72,
-        "orig_train": 128
+        "orig_test": 228,
+        "orig_train": 372
       }
     },
     {
-      "file": "qwen3-4b-nothink__pass1_eq_50pct__n200.jsonl",
-      "band": "p = 50%",
-      "pool_size": 294,
-      "sampled": 200,
-      "mean_pass_at_1": 0.5,
-      "level_dist": {
-        "1": 4,
-        "2": 13,
-        "3": 17,
-        "4": 63,
-        "5": 103
-      },
-      "split_origin_dist": {
-        "orig_test": 69,
-        "orig_train": 131
-      }
-    },
-    {
-      "file": "qwen3-4b-nothink__pass1_eq_75pct__n500.jsonl",
-      "band": "p = 75%",
-      "pool_size": 510,
-      "sampled": 500,
-      "mean_pass_at_1": 0.75,
+      "file": "qwen3-4b-nothink__pass1_37-62pct__n1000.jsonl",
+      "band": "37.5% <= p <= 62.5%",
+      "pool_size": 1021,
+      "sampled": 1000,
+      "mean_pass_at_1": 0.51325,
       "level_dist": {
         "1": 14,
-        "2": 37,
-        "3": 73,
-        "4": 143,
-        "5": 233
+        "2": 78,
+        "3": 131,
+        "4": 235,
+        "5": 542
       },
       "split_origin_dist": {
-        "orig_test": 177,
-        "orig_train": 323
+        "orig_test": 367,
+        "orig_train": 633
       }
     },
     {
-      "file": "qwen3-4b-nothink__pass1_eq_1__n500.jsonl",
-      "band": "p = 1",
-      "pool_size": 8199,
-      "sampled": 500,
-      "mean_pass_at_1": 1.0,
+      "file": "qwen3-4b-nothink__pass1_75-87pct__n1000.jsonl",
+      "band": "75% <= p <= 87.5%",
+      "pool_size": 1373,
+      "sampled": 1000,
+      "mean_pass_at_1": 0.829125,
       "level_dist": {
-        "1": 48,
-        "2": 106,
-        "3": 138,
-        "4": 124,
-        "5": 84
+        "1": 23,
+        "2": 90,
+        "3": 189,
+        "4": 274,
+        "5": 424
       },
       "split_origin_dist": {
-        "orig_test": 197,
-        "orig_train": 303
+        "orig_test": 349,
+        "orig_train": 651
+      }
+    },
+    {
+      "file": "qwen3-4b-nothink__pass1_eq_1__n1000.jsonl",
+      "band": "p = 1",
+      "pool_size": 8199,
+      "sampled": 1000,
+      "mean_pass_at_1": 1.0,
+      "level_dist": {
+        "1": 120,
+        "2": 205,
+        "3": 284,
+        "4": 227,
+        "5": 164
+      },
+      "split_origin_dist": {
+        "orig_test": 383,
+        "orig_train": 617
       }
     }
   ]

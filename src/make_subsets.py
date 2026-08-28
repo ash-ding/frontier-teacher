@@ -67,13 +67,15 @@ MODELS = {
         "pool_size": 11996,
         "pool_note": "full MATH train pool; no differential contamination detected",
         "sampling": {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "max_tokens": 8192},
-        # exact values: at n=8 pass@1 is quantised to c/8, so these are single points
+        # Same band structure as qwen3-4b-think, so the two decoding modes are
+        # directly comparable. An earlier version took single c/8 points, which
+        # left 64% of the trainable problems in no subset at all.
         "bands": [
-            ("pass1_eq_0",      "p = 0",     lambda p: p == 0.0,   779,  700),
-            ("pass1_eq_25pct",  "p = 25%",   lambda p: p == 0.25,  288,  200),
-            ("pass1_eq_50pct",  "p = 50%",   lambda p: p == 0.50,  294,  200),
-            ("pass1_eq_75pct",  "p = 75%",   lambda p: p == 0.75,  510,  500),
-            ("pass1_eq_1",      "p = 1",     lambda p: p == 1.0,  8199,  500),
+            ("pass1_eq_0",      "p = 0",                lambda p: p == 0.0,             779,  700),
+            ("pass1_12-25pct",  "12.5% <= p <= 25%",    lambda p: 0.125 <= p <= 0.25,   624,  600),
+            ("pass1_37-62pct",  "37.5% <= p <= 62.5%",  lambda p: 0.375 <= p <= 0.625, 1021, 1000),
+            ("pass1_75-87pct",  "75% <= p <= 87.5%",    lambda p: 0.75 <= p <= 0.875,  1373, 1000),
+            ("pass1_eq_1",      "p = 1",                lambda p: p == 1.0,            8199, 1000),
         ],
     },
 }
