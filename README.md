@@ -186,6 +186,7 @@ results/
 |---|---:|---|
 | MATH-500 | 500 | `HuggingFaceH4/MATH-500` — the problems Lightman et al. held out of the original MATH *test* split for PRM800K. |
 | AIME 2020–2024 | 150 | Assembled: `di-zhang-fdu/AIME_1983_2024` for 2020–21, `AI-MO/aimo-validation-aime` for 2022–24. |
+| HMMT (3 competitions) | 93 | `MathArena/hmmt_feb_2025`, `MathArena/hmmt_nov_2025`, `MathArena/hmmt_feb_2026`. |
 | MATH train pool | 11,996 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. 7,498 from the original train split + 4,498 from the original test split. |
 
 AIME has to be assembled because no single public set covers all five years.
@@ -194,6 +195,38 @@ deliberately unused. The full Hendrycks MATH set is 12,500 problems — 7,500 tr
 and 5,000 test; the PRM800K re-split moves 4,500 test problems into training and
 keeps 500 as MATH-500, which is why the training pool and the eval set are
 disjoint by construction.
+
+### HMMT
+
+The Harvard-MIT Mathematics Tournament runs twice a year — November at Harvard,
+February at MIT — and is generally harder than AIME, since entry is by invitation
+rather than open selection. MathArena publishes each competition shortly after it
+is held, which is what makes these sets useful beyond raw difficulty: they carry
+a known date.
+
+| File | Competition | Problems | Integer answers |
+|---|---|---:|---:|
+| `data/hmmt_feb_2025.jsonl` | February 2025 | 30 | 14 |
+| `data/hmmt_nov_2025.jsonl` | November 2025 | 30 | 21 |
+| `data/hmmt_feb_2026.jsonl` | February 2026 | 33 | 16 |
+| | **total** | **93** | **51** |
+
+Unlike the other benchmarks here these files are committed rather than rebuilt on
+demand, because MathArena's sets are recent enough that upstream revisions are
+plausible and the exact problem set should stay pinned. `data/build_hmmt.py`
+regenerates them and asserts the per-competition counts, that the three sets are
+mutually disjoint, and that none of the 93 problems appears in MATH-500.
+
+**HMMT is not yet wired into the eval configs, and answer grading is the reason.**
+Only 51 of 93 answers are integers; the rest are exact forms — `\frac{1}{576}`,
+`\frac{9\sqrt{23}}{23}`, `1-\frac{2}{\pi}`, `(3+\sqrt{6})^{-1/3}` — so scoring
+must go through `math_verify` symbolic equivalence rather than the integer
+comparison AIME uses, and one Feb 2025 problem has a comma-separated multi-part
+answer that the current extractor would take as a single string. Until the
+grading path is calibrated on these, a score here would not be separable from a
+parser artefact. `integer_answer` must stay `false` for any HMMT task.
+
+The data is redistributed from MathArena under CC BY-NC-SA 4.0.
 
 ## Curated subsets
 
