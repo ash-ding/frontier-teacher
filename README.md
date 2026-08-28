@@ -445,27 +445,35 @@ The data is redistributed from MathArena under CC BY-NC-SA 4.0.
 `data/further_improve/<model>/`, one JSONL per difficulty band. Filenames encode the
 model, the pass@1 band, and the sample count.
 
-**Llama-3.2-3B** — drawn from the 4,498 clean problems, profiled at 32 samples
-(pass@1 resolution 3.1%):
+**Llama-3.2-3B** — drawn from the 4,498 clean problems, profiled at 32 samples (pass@1 resolution 3.1%):
 
-| File | Band | Pool | Sampled |
-|---|---|---:|---:|
-| `llama32-3b__pass1_eq_0__n800.jsonl` | p = 0 | 814 | 800 |
-| `llama32-3b__pass1_05-15pct__n400.jsonl` | 5% ≤ p < 15% | 487 | 400 |
-| `llama32-3b__pass1_40-60pct__n500.jsonl` | 40% ≤ p ≤ 60% | 570 | 500 |
-| `llama32-3b__pass1_85-95pct__n400.jsonl` | 85% < p < 95% | 437 | 400 |
-| `llama32-3b__pass1_eq_1__n100.jsonl` | p = 1 | 131 | 100 |
+| File | Band | Mean pass@1 | Pool | Sampled |
+|---|---|---:|---:|---:|
+| `llama32-3b__pass1_eq_0__n800.jsonl` | p = 0 | 0.0% | 814 | 800 |
+| `llama32-3b__pass1_05-15pct__n400.jsonl` | 5% ≤ p < 15% | 8.7% | 487 | 400 |
+| `llama32-3b__pass1_40-60pct__n500.jsonl` | 40% ≤ p ≤ 60% | 49.5% | 570 | 500 |
+| `llama32-3b__pass1_85-95pct__n400.jsonl` | 85% < p < 95% | 90.9% | 437 | 400 |
+| `llama32-3b__pass1_eq_1__n100.jsonl` | p = 1 | 100.0% | 131 | 100 |
 
-**Qwen3-4B non-thinking** — full pool, 8 samples (resolution 12.5%, so the bands
-are exact values):
+**Qwen3-4B non-thinking** — full pool of 11,996, profiled at 8 samples (pass@1 resolution 12.5%):
 
-| File | Band | Pool | Sampled |
-|---|---|---:|---:|
-| `qwen3-4b-nothink__pass1_eq_0__n700.jsonl` | p = 0 | 779 | 700 |
-| `qwen3-4b-nothink__pass1_eq_25pct__n200.jsonl` | p = 25% | 288 | 200 |
-| `qwen3-4b-nothink__pass1_eq_50pct__n200.jsonl` | p = 50% | 294 | 200 |
-| `qwen3-4b-nothink__pass1_eq_75pct__n500.jsonl` | p = 75% | 510 | 500 |
-| `qwen3-4b-nothink__pass1_eq_1__n500.jsonl` | p = 1 | 8,199 | 500 |
+| File | Band | Mean pass@1 | Pool | Sampled |
+|---|---|---:|---:|---:|
+| `qwen3-4b-nothink__pass1_eq_0__n700.jsonl` | p = 0 | 0.0% | 779 | 700 |
+| `qwen3-4b-nothink__pass1_12-25pct__n600.jsonl` | 12.5% ≤ p ≤ 25% | 18.3% | 624 | 600 |
+| `qwen3-4b-nothink__pass1_37-62pct__n1000.jsonl` | 37.5% ≤ p ≤ 62.5% | 51.3% | 1,021 | 1,000 |
+| `qwen3-4b-nothink__pass1_75-87pct__n1000.jsonl` | 75% ≤ p ≤ 87.5% | 82.9% | 1,373 | 1,000 |
+| `qwen3-4b-nothink__pass1_eq_1__n1000.jsonl` | p = 1 | 100.0% | 8,199 | 1,000 |
+
+**Qwen3-4B thinking** — full pool of 11,996, profiled at 8 samples (pass@1 resolution 12.5%):
+
+| File | Band | Mean pass@1 | Pool | Sampled |
+|---|---|---:|---:|---:|
+| `qwen3-4b-think__pass1_eq_0__n200.jsonl` | p = 0 | 0.0% | 295 | 200 |
+| `qwen3-4b-think__pass1_12-25pct__n100.jsonl` | 12.5% ≤ p ≤ 25% | 18.6% | 136 | 100 |
+| `qwen3-4b-think__pass1_37-62pct__n200.jsonl` | 37.5% ≤ p ≤ 62.5% | 51.1% | 235 | 200 |
+| `qwen3-4b-think__pass1_75-87pct__n400.jsonl` | 75% ≤ p ≤ 87.5% | 83.7% | 480 | 400 |
+| `qwen3-4b-think__pass1_eq_1__n500.jsonl` | p = 1 | 100.0% | 10,850 | 500 |
 
 Each record carries `id`, `problem`, `answer`, `level`, `subject`, `pass_at_1`,
 `n_correct`, `n_samples`, `split_origin`, `band`, `profiled_model`. Every

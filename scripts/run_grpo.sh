@@ -79,6 +79,19 @@ EXP="${CFG}__${BAND}"
 # checkpoints on the same node and deletes them before the next run starts;
 # per-run peak is 4 x 26 GB = 104 GB against 174 GB free.
 CKPT="$REPO/outputs/checkpoints/$EXP"
+
+# Start from the base model, always. verl's default resume_mode=auto silently
+# picks up whatever checkpoint directory it finds and continues from it - which
+# on a re-run means training resumes from an ABORTED earlier attempt whose step
+# count and provenance are unknown, and whose curve is then not comparable with
+# the other eight cells. It also interacts badly with reclaiming disk: the
+# janitor that strips redundant FSDP shards left a checkpoint that auto-resume
+# could see but not load, and the run died at startup with FileNotFoundError.
+# Each of the nine runs is a clean 20 steps from the released weights.
+if [ -d "$CKPT" ] && [ -n "$(ls -d "$CKPT"/global_step_* 2>/dev/null)" ]; then
+  echo "  clearing stale checkpoints in $CKPT"
+  rm -rf "$CKPT"
+fi
 mkdir -p "$CKPT" logs
 
 echo "=== $EXP ==="
@@ -112,6 +125,7 @@ python -m verl.trainer.main_ppo \
   reward.custom_reward_function.path="$REPO/src/verl_reward.py" \
   reward.custom_reward_function.name=compute_score \
   trainer.use_v1=False \
+  trainer.resume_mode=disable \
   trainer.n_gpus_per_node=$NGPU \
   trainer.nnodes=1 \
   trainer.logger='[console]' \
