@@ -279,6 +279,8 @@ producing files.
 ```
 docs/experiment.md      The experimental record: what was run, what it
                         measured, and what the numbers mean.
+docs/plan.md            Open work, ordered by what unblocks what, plus the
+                        decisions deliberately not revisited.
 requirements.txt        Direct dependencies.
 requirements.lock.txt   Full resolved set, for exact reproduction.
 environment.yml         conda env spec.
