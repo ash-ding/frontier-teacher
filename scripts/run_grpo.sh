@@ -67,12 +67,30 @@ case "$BAND" in
   *)                     G=32; TB=16; MB=8  ;;
 esac
 
+# GROUP_SIZE forces G, overriding the band default, with the train batch derived
+# to keep 512 rollouts per step. This exists because tuning G per band leaves the
+# band comparison confounded: at a fixed rollout budget G also fixes how many
+# distinct problems a step covers (512/G), so the middle band at G=8 saw 64
+# problems per step against the extremes' 16 — four times the data over a run,
+# and correspondingly more epochs. Re-running a middle band at GROUP_SIZE=32
+# matches it to the extremes on every axis except the difficulty band itself.
+#
+# It costs nothing in zero-gradient groups. The (1-p)^G + p^G waste that drives
+# the default mapping is 48.2% for G=8 at p=8.7% but 0% for G=32 at p=49.5% —
+# G=32 on a middle band is statistically over-sampled, not wasteful. What it
+# spends is problem diversity: the same 10,240 rollouts over 320 problem
+# instances instead of 1,280.
+if [ -n "${GROUP_SIZE:-}" ]; then
+  G=$GROUP_SIZE; TB=$((512 / G)); MB=$((TB / 2))
+  echo "  GROUP_SIZE override: G=$G train_batch=$TB mini_batch=$MB"
+fi
+
 SUB=$(ls data/further_improve/"$CFG"/"$CFG"__"$BAND"__n*.jsonl 2>/dev/null | head -1)
 [ -n "$SUB" ] || { echo "no subset matching $CFG/$BAND"; exit 1; }
 TRAIN="${SUB%.jsonl}.verl.jsonl"
 [ -f "$TRAIN" ] || python src/to_verl_dataset.py --subset "$SUB"
 
-EXP="${CFG}__${BAND}"
+EXP="${CFG}__${BAND}${TAG:-}"
 # Checkpoints go to the LOCAL container disk, not ~/data. One checkpoint is 26 GB
 # with optimizer state dropped, so the 36 across all runs would be ~940 GB of
 # writes over the rclone bucket mount. The orchestrator evaluates each run's

@@ -5,7 +5,11 @@
 set -u
 cd "$(dirname "$0")/.."
 CFG="${1:?}"; BAND="${2:?}"
-EXP="${CFG}__${BAND}"
+# TAG suffixes the experiment name so a re-run under different settings
+# (see GROUP_SIZE in run_grpo.sh) writes beside the original instead of
+# overwriting it. Both are passed through to the scripts below.
+export TAG="${TAG:-}" GROUP_SIZE="${GROUP_SIZE:-}"
+EXP="${CFG}__${BAND}${TAG:-}"
 mkdir -p logs
 echo "############ $(date +%H:%M:%S)  TRAIN $EXP ############"
 ./scripts/run_grpo.sh "$CFG" "$BAND" 8 > "logs/grpo__${EXP}.log" 2>&1

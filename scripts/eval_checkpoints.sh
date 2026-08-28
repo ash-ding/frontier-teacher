@@ -21,7 +21,7 @@ CFG="${1:?usage: eval_checkpoints.sh <config-name> <band-slug> [n_gpus]}"
 BAND="${2:?}"
 NGPU="${3:-8}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
-EXP="${CFG}__${BAND}"
+EXP="${CFG}__${BAND}${TAG:-}"
 CKROOT="$REPO/outputs/checkpoints/$EXP"
 TASKS="math500 aime hmmt"
 mkdir -p logs outputs
