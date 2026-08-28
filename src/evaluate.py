@@ -46,9 +46,14 @@ def main():
     if args.num_shards > 1:
         tag += f"__s{args.shard}of{args.num_shards}"
 
-    default_files = {"math500": "math500.jsonl", "aime": "aime_2020_2024.jsonl"}
-    data_file = ROOT / "data" / task.get("data_file", default_files.get(args.task, ""))
-    rows = [json.loads(l) for l in open(data_file)]
+    # a task reads one file (data_file) or several concatenated in order
+    # (data_files) - the latter lets a multi-year benchmark stay split on disk
+    names = task.get("data_files") or [task.get("data_file", f"{args.task}.jsonl")]
+    data_files = [ROOT / "data" / n for n in names]
+    for p_ in data_files:
+        if not p_.exists():
+            raise SystemExit(f"missing dataset {p_}; run the builders in data/ first")
+    rows = [json.loads(l) for p_ in data_files for l in open(p_)]
     if args.limit:
         rows = rows[: args.limit]
     if args.num_shards > 1:

@@ -129,14 +129,21 @@ export HF_TOKEN=hf_...          # or: huggingface-cli login
 
 ## Quick start
 
+The datasets are committed, so a fresh clone can evaluate immediately:
+
 ```bash
 conda activate frontier-teacher
-
-python data/build_datasets.py     # MATH-500 (500) + AIME 2020-2024 (150)
-python data/build_math_train.py   # MATH train pool (11,996)
-
 ./scripts/run_all.sh              # baselines: 6 jobs, one GPU each
 python src/report.py              # results table
+```
+
+The builders are only needed to verify the data or to refresh it from upstream.
+Re-running them reproduces the committed files byte for byte:
+
+```bash
+python data/build_datasets.py     # MATH-500 (500) + AIME, one file per year (150)
+python data/build_hmmt.py         # HMMT, one file per competition (93)
+python data/build_math_train.py   # MATH train pool (11,996)
 ```
 
 Difficulty-profile a model over the training pool (8-way sharded, ~26 min for
@@ -182,19 +189,42 @@ results/
 
 ## Datasets
 
-| Set | Size | Source |
-|---|---:|---|
-| MATH-500 | 500 | `HuggingFaceH4/MATH-500` — the problems Lightman et al. held out of the original MATH *test* split for PRM800K. |
-| AIME 2020–2024 | 150 | Assembled: `di-zhang-fdu/AIME_1983_2024` for 2020–21, `AI-MO/aimo-validation-aime` for 2022–24. |
-| HMMT (3 competitions) | 93 | `MathArena/hmmt_feb_2025`, `MathArena/hmmt_nov_2025`, `MathArena/hmmt_feb_2026`. |
-| MATH train pool | 11,996 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. 7,498 from the original train split + 4,498 from the original test split. |
+**The data files are tracked in this repository, not fetched at run time.** What a
+score means depends on exactly which problems were scored, so the problem set is
+pinned rather than left to an upstream that may revise it. The builders in `data/`
+remain the reproducibility check: re-running them reproduces every file byte for
+byte, verified.
 
-AIME has to be assembled because no single public set covers all five years.
-`di-zhang`'s 2023 and 2024 are incomplete (29 and 14 problems) and are
-deliberately unused. The full Hendrycks MATH set is 12,500 problems — 7,500 train
-and 5,000 test; the PRM800K re-split moves 4,500 test problems into training and
-keeps 500 as MATH-500, which is why the training pool and the eval set are
-disjoint by construction.
+One file per competition, so each set carries its own date — which is what makes
+these usable for reasoning about training cutoffs, not just about difficulty.
+
+| File(s) | Set | Problems | Source |
+|---|---|---:|---|
+| `math500.jsonl` | MATH-500 | 500 | `HuggingFaceH4/MATH-500` — the problems Lightman et al. held out of the original MATH *test* split for PRM800K. |
+| `aime_2020.jsonl` … `aime_2024.jsonl` | AIME, one file per year | 30 each, 150 total | `di-zhang-fdu/AIME_1983_2024` for 2020–21, `AI-MO/aimo-validation-aime` for 2022–24. |
+| `hmmt_feb_2025.jsonl`, `hmmt_nov_2025.jsonl`, `hmmt_feb_2026.jsonl` | HMMT | 30 / 30 / 33, 93 total | MathArena. |
+| `math_train_12k.jsonl` | MATH train pool | 11,996 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. |
+
+A task reads either one file (`data_file`) or several concatenated in order
+(`data_files`), so the `aime` task spans all five years while the years stay
+separate on disk:
+
+```yaml
+aime: {n: 8, max_tokens: 4096, max_model_len: 8192,
+       data_files: [aime_2020.jsonl, aime_2021.jsonl, aime_2022.jsonl,
+                    aime_2023.jsonl, aime_2024.jsonl]}
+```
+
+AIME has to be assembled from two upstreams because no single public set covers
+all five years; `di-zhang`'s 2023 and 2024 are incomplete (29 and 14 problems)
+and are deliberately unused. Problem ids are `aime-<year>-<nn>`. The full
+Hendrycks MATH set is 12,500 problems — 7,500 train and 5,000 test; the PRM800K
+re-split moves 4,500 test problems into training and keeps 500 as MATH-500,
+which is why the training pool and the eval set are disjoint by construction.
+
+The benchmark records under `results/` predate the per-year split and use the
+earlier flat `aime-<nnnn>` ids. They carry the full problem text, so they still
+join to the current files on that.
 
 ### HMMT
 
@@ -293,9 +323,15 @@ somewhat above the reported figure.
 
 Raw generations (~880 MB per profiled model) and the per-problem profiling
 records over the 12k pool (12–36 MB each) are not tracked. They live on the
-compute nodes under `$HOME/data/frontier-teacher/generations/` and
-`outputs/` respectively, and the records are rebuildable from the shards with
+compute nodes under `$HOME/data/frontier-teacher/generations/` and `outputs/`
+respectively, and the records are rebuildable from the shards with
 `src/merge_shards.py`.
+
+Raw generations were only ever written for the training-pool profiling runs.
+`run_all.sh` does not pass `--save-generations`, so the reasoning traces behind
+the MATH-500 and AIME numbers were never saved anywhere — the per-sample verdicts
+and extracted answers in `results/benchmarks/` are all that exists of those runs.
+Re-run with `--save-generations` if the traces themselves are needed.
 
 ## Related work
 

@@ -9,5 +9,5 @@ tensor_parallel_size: 1
 gpu_memory_utilization: 0.90
 tasks:
   math500: {n: 4, max_tokens: 30000, max_model_len: 32768}
-  aime:    {n: 8, max_tokens: 30000, max_model_len: 32768}
+  aime:    {n: 8, max_tokens: 30000, max_model_len: 32768, data_files: [aime_2020.jsonl, aime_2021.jsonl, aime_2022.jsonl, aime_2023.jsonl, aime_2024.jsonl]}
   mathtrain: {n: 8, max_tokens: 30000, max_model_len: 32768, data_file: math_train_12k.jsonl, integer_answer: false}

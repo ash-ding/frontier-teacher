@@ -60,8 +60,11 @@ def build_aime():
             )
 
     rows.sort(key=lambda x: (x["year"], x["problem"][:40]))
-    for i, r in enumerate(rows):
-        r["id"] = f"aime-{i:04d}"
+    per_year = {}
+    for r in rows:
+        i = per_year.get(r["year"], 0)
+        r["id"] = f"aime-{r['year']}-{i:02d}"
+        per_year[r["year"]] = i + 1
 
     by_year = {}
     for r in rows:
@@ -87,9 +90,12 @@ if __name__ == "__main__":
     m = build_math500()
     write(m, "math500.jsonl")
 
+    # One file per competition year, matching how the HMMT sets are stored: each
+    # AIME year is its own contest with its own date, and the date is what makes
+    # these useful for reasoning about training cutoffs.
     a = build_aime()
-    write(a, "aime_2020_2024.jsonl")
-    counts = {}
-    for r in a:
-        counts[r["year"]] = counts.get(r["year"], 0) + 1
-    print("AIME per-year:", dict(sorted(counts.items())))
+    for year in range(2020, 2025):
+        rows = [r for r in a if r["year"] == year]
+        assert len(rows) == 30, f"AIME {year}: got {len(rows)}, expected 30"
+        write(rows, f"aime_{year}.jsonl")
+    print(f"AIME total: {len(a)} across 5 years")

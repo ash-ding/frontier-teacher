@@ -10,11 +10,11 @@ outputs/
 # $HOME/data/frontier-teacher/generations/.
 generations/
 
-# Built datasets - regenerate with data/build_datasets.py and
-# data/build_math_train.py rather than committing them.
-data/math500.jsonl
-data/aime_2020_2024.jsonl
-data/math_train_12k.jsonl
+# Evaluation and training data ARE tracked. Pinning the exact problem set is
+# what makes a score comparable across runs and across time - an upstream
+# revision must not silently change what was measured. The builders in data/
+# stay as the reproducibility check: re-running them should reproduce these
+# files byte for byte.
 
 # Environment / local noise
 .secrets/
