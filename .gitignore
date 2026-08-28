@@ -1,10 +1,15 @@
-# Per-problem profiling records over the 12k pool: 12-36 MB each, regenerable
-# from the shards with src/merge_shards.py. Benchmark records (MATH-500 / AIME)
-# are small and ARE tracked, under results/benchmarks/.
-outputs/
-*__mathtrain.records.jsonl
-*__s[0-9]of[0-9].records.jsonl
-*__s[0-9]of[0-9].summary.json
+# outputs/ is both the working directory that evaluate.py writes to and the
+# record of what was measured - there is no second copy to drift out of sync.
+# Track summaries and per-problem records; leave out what is either huge or an
+# intermediate. A re-run that changes a result shows up in `git status`.
+outputs/*
+!outputs/*.summary.json
+!outputs/*.records.jsonl
+# 12-36 MB each; rebuild from the shards with src/merge_shards.py
+outputs/*__mathtrain.records.jsonl
+# shard intermediates, superseded by the merged file
+outputs/*__s[0-9]of[0-9].*
+outputs/shards/
 
 # Raw generations: ~880 MB per model. Live on the compute nodes under
 # $HOME/data/frontier-teacher/generations/.

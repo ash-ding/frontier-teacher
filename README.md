@@ -184,9 +184,10 @@ scripts/
   run_all.sh      All baseline jobs, one GPU each.
   run_profile.sh  One model over the training pool, 8-way sharded.
   sync_subsets.sh Push subsets to every node and verify by hash.
-results/
-  benchmarks/     MATH-500 and AIME summaries + per-problem records.
-  profiles/       Training-pool profile summaries.
+outputs/          Where evaluate.py writes and where results live - one
+                  directory, no second copy to drift. Summaries and per-problem
+                  records are tracked; the 12-36 MB profiling records and the
+                  shard intermediates are not (see .gitignore).
 ```
 
 ## Datasets
@@ -225,7 +226,7 @@ Hendrycks MATH set is 12,500 problems — 7,500 train and 5,000 test; the PRM800
 re-split moves 4,500 test problems into training and keeps 500 as MATH-500,
 which is why the training pool and the eval set are disjoint by construction.
 
-The benchmark records under `results/` predate the per-year split and use the
+The benchmark records under `outputs/` predate the per-year split and use the
 earlier flat `aime-<nnnn>` ids. They carry the full problem text, so they still
 join to the current files on that.
 
@@ -347,7 +348,7 @@ respectively, and the records are rebuildable from the shards with
 Raw generations were only ever written for the training-pool profiling runs.
 `run_all.sh` does not pass `--save-generations`, so the reasoning traces behind
 the MATH-500 and AIME numbers were never saved anywhere — the per-sample verdicts
-and extracted answers in `results/benchmarks/` are all that exists of those runs.
+and extracted answers in `outputs/` are all that exists of those runs.
 Re-run with `--save-generations` if the traces themselves are needed.
 
 ## Related work
