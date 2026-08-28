@@ -66,7 +66,7 @@ ap.add_argument("--seed", type=int, default=20260828)
 args = ap.parse_args()
 
 spec = MODELS[args.model]
-recs_path = args.records or ROOT / "outputs" / f"{args.model}__mathtrain.records.jsonl"
+recs_path = args.records or ROOT / "outputs" / "math_profiling" / f"{args.model}__mathtrain.records.jsonl"
 outdir = Path(args.out or ROOT / "data" / "further_improve" / args.model)
 
 recs = [json.loads(l) for l in open(recs_path)]

@@ -2,14 +2,21 @@
 # record of what was measured - there is no second copy to drift out of sync.
 # Track summaries and per-problem records; leave out what is either huge or an
 # intermediate. A re-run that changes a result shows up in `git status`.
+#
+# Benchmark runs land at the top level; training-pool profiling runs land in
+# math_profiling/, whose records are 12-36 MB and stay untracked.
 outputs/*
 !outputs/*.summary.json
 !outputs/*.records.jsonl
-# 12-36 MB each; rebuild from the shards with src/merge_shards.py
-outputs/*__mathtrain.records.jsonl
 # shard intermediates, superseded by the merged file
 outputs/*__s[0-9]of[0-9].*
 outputs/shards/
+
+# profiling: keep the summaries, leave the bulk on the compute nodes
+!outputs/math_profiling/
+outputs/math_profiling/*
+!outputs/math_profiling/*.summary.json
+outputs/math_profiling/*__s[0-9]of[0-9].summary.json
 
 # Raw generations: ~880 MB per model. Live on the compute nodes under
 # $HOME/data/frontier-teacher/generations/.

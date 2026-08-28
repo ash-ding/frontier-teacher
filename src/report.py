@@ -1,4 +1,9 @@
-"""Aggregate all summary json files into the final results table."""
+"""Benchmark results table.
+
+Reads the summaries at the top level of outputs/ only. Training-pool profiling
+runs write into outputs/math_profiling/ and are not benchmarks - they have their
+own reader in profile_report.py, which reports a pass@1 distribution rather than
+a single score."""
 import json
 from pathlib import Path
 

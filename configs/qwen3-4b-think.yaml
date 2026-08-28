@@ -10,7 +10,7 @@ gpu_memory_utilization: 0.90
 tasks:
   math500: {n: 4, max_tokens: 30000, max_model_len: 32768, data_file: benchmark/math500.jsonl, headline_metric: "pass@1"}
   aime:    {n: 8, max_tokens: 30000, max_model_len: 32768, data_files: [benchmark/aime_2020.jsonl, benchmark/aime_2021.jsonl, benchmark/aime_2022.jsonl, benchmark/aime_2023.jsonl, benchmark/aime_2024.jsonl], headline_metric: "pass@4"}
-  mathtrain: {n: 8, max_tokens: 30000, max_model_len: 32768, data_files: [training_set/math_train_orig_train.jsonl, training_set/math_train_orig_test.jsonl], integer_answer: false}
+  mathtrain: {n: 8, max_tokens: 30000, max_model_len: 32768, data_files: [training_set/math_train_orig_train.jsonl, training_set/math_train_orig_test.jsonl], integer_answer: false, out_subdir: math_profiling}
 
   # HMMT: 30-33 problems per competition, harder than AIME. pass@1 sits on the
   # floor for a 3B model there, so pass@4 is the headline; 16 samples give the

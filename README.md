@@ -255,9 +255,13 @@ scripts/
   run_profile.sh  One model over the training pool, 8-way sharded.
   sync_subsets.sh Push subsets to every node and verify by hash.
 outputs/          Where evaluate.py writes and where results live - one
-                  directory, no second copy to drift. Summaries and per-problem
-                  records are tracked; the 12-36 MB profiling records and the
-                  shard intermediates are not (see .gitignore).
+                  directory, no second copy to drift.
+  *.summary.json    Benchmark results (MATH-500, AIME, HMMT), tracked.
+  *.records.jsonl   Per-problem, per-sample verdicts, tracked.
+  math_profiling/   Training-pool profiling runs. The mathtrain task routes
+                  here via out_subdir, so it is declared once rather than
+                  passed on every command line. Summaries tracked; the 12-36 MB
+                  records and shard intermediates are not (see .gitignore).
 ```
 
 ## Datasets

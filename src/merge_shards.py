@@ -19,7 +19,7 @@ a = ap.parse_args()
 cfg = yaml.safe_load(open(a.config))
 task_cfg = cfg["tasks"][a.task]
 base = f"{cfg['name']}__{a.task}"
-outdir = Path(a.out)
+outdir = Path(a.out) / task_cfg.get("out_subdir", "")
 
 shards = sorted(outdir.glob(f"{base}__s*of*.records.jsonl"))
 if not shards:

@@ -139,7 +139,10 @@ def main():
     if task.get("headline_metric"):
         summary["headline_metric"] = task["headline_metric"]
 
-    outdir = Path(args.out)
+    # a task may route its output into a subdirectory, so profiling runs do not
+    # sit alongside benchmark results; declared once in the config rather than
+    # passed on every command line, where it would eventually be forgotten
+    outdir = Path(args.out) / task.get("out_subdir", "")
     outdir.mkdir(parents=True, exist_ok=True)
     (outdir / f"{tag}.summary.json").write_text(json.dumps(summary, indent=2))
     with (outdir / f"{tag}.records.jsonl").open("w") as f:

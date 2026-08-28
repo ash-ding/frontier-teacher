@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Difficulty-profile one model over the 12k MATH train pool, sharded across 8 GPUs.
+# Output lands in outputs/math_profiling/ - the mathtrain task declares that via
+# out_subdir, so it is not something this script can forget to pass.
 # usage: ./scripts/run_profile.sh <config-name>
 set -u
 cd "$(dirname "$0")/.."
