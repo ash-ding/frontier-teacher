@@ -277,6 +277,8 @@ producing files.
 ## Layout
 
 ```
+docs/experiment.md      The experimental record: what was run, what it
+                        measured, and what the numbers mean.
 requirements.txt        Direct dependencies.
 requirements.lock.txt   Full resolved set, for exact reproduction.
 environment.yml         conda env spec.
