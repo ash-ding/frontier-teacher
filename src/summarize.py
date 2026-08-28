@@ -32,7 +32,7 @@ def summarize(records, cfg, task_name, task_cfg, extra=None):
                      "top_k": cfg.get("top_k", -1), "max_tokens": task_cfg["max_tokens"],
                      "enable_thinking": cfg.get("enable_thinking")},
     }
-    for k in (1, 4, 8):
+    for k in (1, 4, 8, 16):
         if k <= n:
             vals = [pass_at_k(r["n"], r["c"], k) for r in records]
             out[f"pass@{k}"] = float(np.mean(vals))

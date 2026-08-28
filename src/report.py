@@ -10,7 +10,9 @@ for p in sorted((ROOT / "outputs").glob("*.summary.json")):
     if SHARD.search(p.name):
         continue          # per-shard partials; the merged file supersedes them
     s = json.loads(p.read_text())
-    headline = "pass@1" if s["task"] == "math500" else "pass@4"
+    # the summary records which metric the task treats as headline; fall back to
+    # the old name-based rule for summaries written before that field existed
+    headline = s.get("headline_metric") or ("pass@1" if s["task"] == "math500" else "pass@4")
     rows.append({
         "config": s["config"], "task": s["task"], "n": s["n_problems"],
         "samples": s["samples_per_problem"], "metric": headline,

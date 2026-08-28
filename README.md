@@ -27,6 +27,44 @@ actually known. Both are done and shipped here.
 
 Teacher-side training is not in this repository yet.
 
+### Benchmarks
+
+| Benchmark | Problems | Samples / problem | Headline metric | Answer format | Status |
+|---|---:|---:|---|---|---|
+| MATH-500 | 500 | 4 | **pass@1** | mixed; symbolic compare | measured |
+| AIME 2020–2024 | 150 | 8 | **pass@4** | integers 0–999; exact compare | measured |
+| HMMT (3 competitions) | 93 | 16 | **pass@4** | 51/93 integers, 42 exact forms; symbolic compare | **not yet run** |
+
+HMMT is also configured per competition — `hmmt_feb_2025`, `hmmt_nov_2025`,
+`hmmt_feb_2026` — so the three dates can be compared against a training cutoff.
+Sixteen samples yield the whole pass@1 / @4 / @8 / @16 ladder from one run; the
+headline is only which number a comparison should lead with.
+
+**Why the metric differs by benchmark.** The point of choosing *k* is to keep the
+score off both the floor and the ceiling, where it stops discriminating.
+
+On MATH-500, pass@1 works because 500 problems give a ±1.7 point standard error
+and Llama-3.2-3B scores 38.8% — mid-range, with room to move in both directions.
+
+On AIME it does not. Llama's pass@1 there is 6.3%, about nine problems out of
+150, and the standard error on that is ±2.0 — **32% relative noise**. A real
+improvement from 6.3% to 8% would be invisible. pass@4 lifts the same runs to
+15.3% ± 2.6, cutting relative noise to 17%. pass@k also answers the question this
+project actually cares about: whether a correct trajectory exists anywhere in the
+model's sampling distribution, since a problem the student never solves offers
+reinforcement learning nothing to reinforce.
+
+HMMT is harder than AIME with a third of the problems per competition, so pass@1
+would sit further onto the floor still, and pass@4 is the headline for the same
+reason.
+
+**A limit worth stating plainly:** the standard error is set by the number of
+problems, and no amount of extra sampling moves it. At 30 problems it is ±8.9
+points around a 50% score. Two single competitions can therefore only be
+distinguished if they differ by roughly 30 points — larger than the 20.7-point
+contamination effect measured on Llama. Any date-based comparison has to pool
+competitions to have the power to see anything.
+
 ### Baselines
 
 | Configuration | MATH-500 pass@1 | AIME 2020–2024 pass@4 |
@@ -307,14 +345,19 @@ plausible and the exact problem set should stay pinned. `data/build_hmmt.py`
 regenerates them and asserts the per-competition counts, that the three sets are
 mutually disjoint, and that none of the 93 problems appears in MATH-500.
 
-**HMMT is not yet wired into the eval configs, and answer grading is the reason.**
-Only 51 of 93 answers are integers; the rest are exact forms — `\frac{1}{576}`,
+**HMMT is configured but has not been run, and grading is why.** Only 51 of 93
+answers are integers; the rest are exact forms — `\frac{1}{576}`,
 `\frac{9\sqrt{23}}{23}`, `1-\frac{2}{\pi}`, `(3+\sqrt{6})^{-1/3}` — so scoring
-must go through `math_verify` symbolic equivalence rather than the integer
-comparison AIME uses, and one Feb 2025 problem has a comma-separated multi-part
-answer that the current extractor would take as a single string. Until the
-grading path is calibrated on these, a score here would not be separable from a
-parser artefact. `integer_answer` must stay `false` for any HMMT task.
+goes through `math_verify` symbolic equivalence rather than the integer
+comparison AIME uses (`integer_answer: false` on every HMMT task). One Feb 2025
+problem carries a comma-separated multi-part answer that the current extractor
+would take as a single string.
+
+The grading path is calibrated on MATH-500, where it reproduces the published
+38% baseline, but not on these. Until it is, an HMMT score would not be
+separable from a parser artefact — which matters more here than usual, because
+the reason to run HMMT is to compare dates, and a parser that fails differently
+across competitions would look exactly like the effect being tested for.
 
 The data is redistributed from MathArena under CC BY-NC-SA 4.0.
 

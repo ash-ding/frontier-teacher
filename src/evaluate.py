@@ -136,6 +136,8 @@ def main():
         "shard": args.shard, "num_shards": args.num_shards,
     })
     summary["tag"] = tag
+    if task.get("headline_metric"):
+        summary["headline_metric"] = task["headline_metric"]
 
     outdir = Path(args.out)
     outdir.mkdir(parents=True, exist_ok=True)
