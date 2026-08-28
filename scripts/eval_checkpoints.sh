@@ -20,7 +20,16 @@ conda activate frontier-teacher
 CFG="${1:?usage: eval_checkpoints.sh <config-name> <band-slug> [n_gpus]}"
 BAND="${2:?}"
 NGPU="${3:-8}"
-JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
+# One evaluation job runs on ONE GPU. For Llama and non-thinking that is minutes.
+# For thinking it is not: MATH-500 alone is 2,000 generations at ~39 gen/min/GPU,
+# and a TRAINED checkpoint generates longer than the base model did, so the
+# hardest set (HMMT, 1,488 samples of the longest reasoning) overruns an hour
+# comfortably. A 3,600 s default silently killed six thinking evaluations and
+# recorded them as FAIL, on exactly the runs this project cares most about.
+case "$CFG" in
+  *think*) JOB_TIMEOUT="${JOB_TIMEOUT:-14400}" ;;
+  *)       JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"  ;;
+esac
 EXP="${CFG}__${BAND}${TAG:-}"
 CKROOT="$REPO/outputs/checkpoints/$EXP"
 TASKS="math500 aime hmmt"

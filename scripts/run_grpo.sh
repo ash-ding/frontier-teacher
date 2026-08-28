@@ -35,7 +35,7 @@ NGPU="${3:-8}"
 case "$CFG" in
   llama32-3b)       MODEL=unsloth/Llama-3.2-3B-Instruct; MAXRESP=4096;  TEMP=0.6; TOPP=0.9;  TOPK=-1; THINK='';    MEMUTIL=0.5 ;;
   qwen3-4b-nothink) MODEL=Qwen/Qwen3-4B;                 MAXRESP=8192;  TEMP=0.7; TOPP=0.8;  TOPK=20; THINK=false; MEMUTIL=0.5 ;;
-  qwen3-4b-think)   MODEL=Qwen/Qwen3-4B;                 MAXRESP=32768; TEMP=0.6; TOPP=0.95; TOPK=20; THINK=true;  MEMUTIL=0.6 ;;
+  qwen3-4b-think)   MODEL=Qwen/Qwen3-4B;                 MAXRESP=32768; TEMP=0.6; TOPP=0.95; TOPK=20; THINK=true;  MEMUTIL=0.45 ;;
   *) echo "unknown config $CFG"; exit 1 ;;
 esac
 
@@ -45,7 +45,13 @@ esac
 # token budget instead - identical worst case (one maximal sequence) with the
 # short ones packed densely. The budget must exceed prompt+response or verl
 # cannot place the longest sequence at all.
-SEQ=$((MAXRESP + 1024 + 1024))
+# The budget was 34,816 (prompt + response + slack) at vLLM 0.6, and the low
+# thinking band died of CUDA OOM at step 19 of 20: the logits tensor alone is
+# tokens x 151,936 vocab x 2 bytes = 10.6 GB, the temperature division makes a
+# second copy, and vLLM still held 35.9 GB. 11.63 GB was wanted with 11.03 free.
+# Trim the budget to just above the longest possible sequence and give vLLM less,
+# which costs some rollout concurrency and buys the run finishing.
+SEQ=$((MAXRESP + 1024 + 256))
 if [ "$MAXRESP" -gt 16384 ]; then
   BATCHING=(
     actor_rollout_ref.actor.use_dynamic_bsz=True
