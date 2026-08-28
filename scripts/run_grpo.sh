@@ -25,12 +25,41 @@ CFG="${1:?usage: run_grpo.sh <config-name> <band-slug> [n_gpus]}"
 BAND="${2:?usage: run_grpo.sh <config-name> <band-slug> [n_gpus]}"
 NGPU="${3:-8}"
 
+# max_response_length must not bind tighter than evaluation does, or training and
+# evaluation are not measuring the same model. Evaluation allows 30,000 tokens
+# (configs/*.yaml max_tokens), and a first thinking run capped at 12,288 had 52%
+# of its rollouts truncated - rising from 31% at step 1 to 60% by step 20 as GRPO
+# lengthened responses. A truncated rollout carries no \boxed{} and scores 0, so
+# over half the batch was being graded on where the cap fell rather than on
+# whether the answer was right. 32,768 restores the match with evaluation.
 case "$CFG" in
-  llama32-3b)       MODEL=unsloth/Llama-3.2-3B-Instruct; MAXRESP=4096;  TEMP=0.6; TOPP=0.9;  TOPK=-1; THINK='' ;;
-  qwen3-4b-nothink) MODEL=Qwen/Qwen3-4B;                 MAXRESP=8192;  TEMP=0.7; TOPP=0.8;  TOPK=20; THINK=false ;;
-  qwen3-4b-think)   MODEL=Qwen/Qwen3-4B;                 MAXRESP=12288; TEMP=0.6; TOPP=0.95; TOPK=20; THINK=true ;;
+  llama32-3b)       MODEL=unsloth/Llama-3.2-3B-Instruct; MAXRESP=4096;  TEMP=0.6; TOPP=0.9;  TOPK=-1; THINK='';    MEMUTIL=0.5 ;;
+  qwen3-4b-nothink) MODEL=Qwen/Qwen3-4B;                 MAXRESP=8192;  TEMP=0.7; TOPP=0.8;  TOPK=20; THINK=false; MEMUTIL=0.5 ;;
+  qwen3-4b-think)   MODEL=Qwen/Qwen3-4B;                 MAXRESP=32768; TEMP=0.6; TOPP=0.95; TOPK=20; THINK=true;  MEMUTIL=0.6 ;;
   *) echo "unknown config $CFG"; exit 1 ;;
 esac
+
+# A fixed micro-batch COUNT cannot express a 32k cap: two 33,792-token sequences
+# in one backward pass is ~2.5x the activation memory that fit at 12k, and the
+# same count is wasteful when a sequence comes back at 1,700 tokens. Batch by
+# token budget instead - identical worst case (one maximal sequence) with the
+# short ones packed densely. The budget must exceed prompt+response or verl
+# cannot place the longest sequence at all.
+SEQ=$((MAXRESP + 1024 + 1024))
+if [ "$MAXRESP" -gt 16384 ]; then
+  BATCHING=(
+    actor_rollout_ref.actor.use_dynamic_bsz=True
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=$SEQ
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=$((SEQ * 2))
+    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=$((SEQ * 2))
+  )
+else
+  BATCHING=(
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4
+  )
+fi
 
 # middle band -> G=8; the two extreme bands -> G=32. Both give 512 rollouts/step.
 case "$BAND" in
@@ -55,7 +84,7 @@ mkdir -p "$CKPT" logs
 echo "=== $EXP ==="
 echo "  model=$MODEL  subset=$(basename "$SUB")  problems=$(wc -l < "$SUB")"
 echo "  G=$G  train_batch=$TB  mini_batch=$MB  -> $((TB*G)) rollouts/step, 20 steps = $((TB*G*20))"
-echo "  max_response=$MAXRESP  enable_thinking=${THINK:-n/a}  gpus=$NGPU"
+echo "  max_response=$MAXRESP  enable_thinking=${THINK:-n/a}  gpus=$NGPU  vllm_util=$MEMUTIL"
 
 python -m verl.trainer.main_ppo \
   algorithm.adv_estimator=grpo \
@@ -66,9 +95,7 @@ python -m verl.trainer.main_ppo \
   data.max_response_length=$MAXRESP \
   actor_rollout_ref.model.path="$MODEL" \
   actor_rollout_ref.actor.ppo_mini_batch_size=$MB \
-  actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
-  actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
-  actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4 \
+  "${BATCHING[@]}" \
   actor_rollout_ref.actor.optim.lr=1e-6 \
   actor_rollout_ref.actor.use_kl_loss=True \
   actor_rollout_ref.actor.kl_loss_coef=0.001 \
@@ -81,7 +108,7 @@ python -m verl.trainer.main_ppo \
   actor_rollout_ref.rollout.top_p=$TOPP \
   actor_rollout_ref.rollout.top_k=$TOPK \
   actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
-  actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \
+  actor_rollout_ref.rollout.gpu_memory_utilization=$MEMUTIL \
   reward.custom_reward_function.path="$REPO/src/verl_reward.py" \
   reward.custom_reward_function.name=compute_score \
   trainer.use_v1=False \
