@@ -35,3 +35,6 @@ logs/
 __pycache__/
 *.pyc
 .DS_Store
+
+# scratch: cross-validation reruns during the environment migration
+outputs_xval/

@@ -152,26 +152,74 @@ Three files, for three different needs:
 | `requirements.lock.txt` | Exact reproduction. The full 207-package resolved set, captured with `pip freeze` from a working node. |
 | `environment.yml` | `conda env create -f environment.yml`. Takes python from conda and everything else from `requirements.txt`. |
 
+One environment both evaluates and trains.
+
 | Package | Version | Why |
 |---|---|---|
 | `python` | 3.12 | |
 | `vllm` | **0.27.1** | Batch inference engine. Selects a CUDA-matched `torch` (2.13.0+cu130 here). |
-| `math-verify[antlr4_13_2]` | 0.9.0 | Symbolic answer equivalence — MATH and HMMT answers are exact forms, not integers. |
+| `verl` | **0.9.0** | GRPO training. Brings `ray`, `tensordict`, `peft`, `hydra-core`. |
+| `math-verify[antlr4_9_3]` | 0.9.0 | Symbolic answer equivalence — MATH and HMMT answers are exact forms, not integers. |
+| `transformers` | 5.10.4 | Tokenizers and chat templates. Held here by verl. |
 | `datasets` | 5.0.1 | Dataset loading. |
-| `transformers` | 5.16.1 | Tokenizers and chat templates. |
 | `accelerate`, `pandas`, `tabulate`, `PyYAML` | — | Support. |
+| `flash-attn` | 2.8.3.post1 | Optional; see below. |
 
-Two of these pins are load-bearing rather than cautious.
+Two of these are load-bearing rather than cautious.
 
 **`vllm` must be installed first and alone.** It selects the CUDA-matched `torch`
 build; installing `torch` yourself, or letting a later resolution step move it,
 is the usual way this environment breaks. `setup_env.sh` installs `vllm` on its
 own before the rest for exactly this reason.
 
-**`math-verify` needs the `antlr4_13_2` extra.** Without it the LaTeX parser
-degrades *silently* — it does not raise, it just fails to parse and depresses
-every score. A grading path that fails quietly is worse than one that crashes,
-because the result still looks like a number.
+**`math-verify`'s extra must match the antlr4 runtime the environment ends up
+with.** verl depends on `hydra-core`, which pins `antlr4-python3-runtime==4.9.*`,
+so the correct extra here is `antlr4_9_3` — not `antlr4_13_2`, which is right
+only for an evaluation-only environment. A mismatch does not raise: the LaTeX
+parser degrades *silently*, failing to parse and depressing every score. A
+grading path that fails quietly is worse than one that crashes, because the
+result still looks like a number. `src/calibrate_grading.py` is what proves the
+installed combination actually works.
+
+### Evaluation and training share one environment
+
+They were initially built separately, on the finding that
+`math-verify[antlr4_13_2]` and verl's `hydra-core` pin antlr4 to mutually
+exclusive versions. That reading was incomplete — math-verify publishes an
+`antlr4_9_3` extra whose purpose is matching whatever antlr4 is already present,
+so with the right extra there is no conflict.
+
+Three independent checks confirmed the shared environment measures the same
+thing the evaluation-only one did:
+
+- **Chat templates are byte-identical.** Rendering the same prompt under
+  transformers 5.16.1 and 5.10.4 gives the same md5 for all three model
+  configurations, so the models are asked the same question.
+- **Grading is unchanged.** `calibrate_grading.py` passes identity, specificity,
+  thinking and all 28 equivalence cases at 100% on MATH-500, AIME and HMMT under
+  antlr4 4.9.3.
+- **A re-run reproduces the number.** Llama-3.2-3B on MATH-500 scored 39.1% in
+  the shared environment against 38.8% before — a 0.35-point difference, well
+  inside the ±1.7 standard error.
+
+### flash-attn
+
+Optional. verl runs without it, using PyTorch attention, which is slower.
+
+There is no prebuilt wheel for torch 2.13+cu130, so it builds from source, and
+the build fails out of the box: `CUDA_HOME` on these nodes points at a 12.9
+toolkit while torch was built with 13.0, and PyTorch's extension builder rejects
+a **major** version mismatch (it only warns on a minor one). CUDA 13.2 is present
+at `/usr/local/cuda`, which shares torch's major version:
+
+```bash
+CUDA_HOME=/usr/local/cuda TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 \
+  pip install flash-attn==2.8.3.post1 --no-build-isolation
+```
+
+`TORCH_CUDA_ARCH_LIST="9.0"` builds for H100 only; the default builds every
+architecture and produces a ~930 MB extension. Keep `MAX_JOBS` modest — each
+nvcc job takes 2–4 GB.
 
 Verify an install:
 

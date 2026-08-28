@@ -1,20 +1,33 @@
 # Direct dependencies. Versions are the ones this project was verified on
-# (see requirements.lock.txt for the full resolved set).
+# (requirements.lock.txt has the full resolved set).
 #
-# vllm is the only hard pin, and it is a real constraint rather than caution:
-# it selects a CUDA-matched torch build (2.13.0+cu130 here). Installing torch
-# separately, or letting pip resolve a different vllm, is the usual way this
-# environment breaks. Install vllm FIRST and let it bring torch in.
+# One environment both evaluates and trains. Install order matters, and two of
+# these pins are load-bearing rather than cautious.
+
+# vllm FIRST and alone: it selects the CUDA-matched torch build (2.13.0+cu130
+# here). Installing torch separately, or letting a later resolution step move
+# it, is the usual way this environment breaks.
 vllm==0.27.1
 
+# GRPO and the rest of the RL stack. Pulls transformers back to 5.10.x and
+# antlr4 to 4.9.3 via hydra-core - both fine, see the math-verify note below.
+verl==0.9.0
+
 # Symbolic answer equivalence for MATH and HMMT, whose answers are exact forms
-# rather than integers. The antlr4_13_2 extra is required - without it the LaTeX
-# parser degrades silently and depresses scores rather than raising.
-math-verify[antlr4_13_2]==0.9.0
+# rather than integers. The extra must MATCH the antlr4 runtime the environment
+# ends up with: verl's hydra-core pins 4.9.3, so use antlr4_9_3, not
+# antlr4_13_2. A mismatch does not raise - the LaTeX parser degrades silently
+# and depresses every score. Verified with src/calibrate_grading.py.
+math-verify[antlr4_9_3]==0.9.0
 
 datasets==5.0.1
-transformers==5.16.1
 accelerate==1.14.0
 pandas==3.0.5
 tabulate==0.10.0
 PyYAML==6.0.3
+
+# Optional, build from source against CUDA 13:
+#   CUDA_HOME=/usr/local/cuda TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 \
+#     pip install flash-attn==2.8.3.post1 --no-build-isolation
+# No prebuilt wheel exists for torch 2.13+cu130, and the default CUDA_HOME on
+# these nodes points at a 12.9 toolkit whose major version torch rejects.
