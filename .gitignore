@@ -38,3 +38,6 @@ __pycache__/
 
 # scratch: cross-validation reruns during the environment migration
 outputs_xval/
+
+# verl-format conversions of the subsets; regenerate with src/to_verl_dataset.py
+*.verl.jsonl
