@@ -1,0 +1,13 @@
+name: qwen3-4b-think
+model: Qwen/Qwen3-4B
+enable_thinking: true
+temperature: 0.6      # Qwen's official thinking-mode preset
+top_p: 0.95
+top_k: 20
+seed: 1234
+tensor_parallel_size: 1
+gpu_memory_utilization: 0.90
+tasks:
+  math500: {n: 4, max_tokens: 30000, max_model_len: 32768}
+  aime:    {n: 8, max_tokens: 30000, max_model_len: 32768}
+  mathtrain: {n: 8, max_tokens: 30000, max_model_len: 32768, data_file: math_train_12k.jsonl, integer_answer: false}

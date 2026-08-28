@@ -1,0 +1,12 @@
+name: llama32-3b
+model: unsloth/Llama-3.2-3B-Instruct   # non-gated mirror of meta-llama/Llama-3.2-3B-Instruct
+# Llama 3.2 has no thinking/non-thinking split -> enable_thinking omitted entirely.
+temperature: 0.6      # Meta's recommended decoding for 3.2 Instruct
+top_p: 0.9
+seed: 1234
+tensor_parallel_size: 1
+gpu_memory_utilization: 0.90
+tasks:
+  math500: {n: 4, max_tokens: 4096, max_model_len: 8192}
+  aime:    {n: 8, max_tokens: 4096, max_model_len: 8192}
+  mathtrain: {n: 32, max_tokens: 4096, max_model_len: 8192, data_file: math_train_12k.jsonl, integer_answer: false}

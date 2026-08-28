@@ -1,0 +1,26 @@
+{
+  "tag": "qwen3-4b-nothink__mathtrain",
+  "model": "Qwen/Qwen3-4B",
+  "config": "qwen3-4b-nothink",
+  "task": "mathtrain",
+  "n_problems": 11996,
+  "samples_per_problem": 8,
+  "pass@1": 0.8315271757252417,
+  "pass@1_stderr": 0.0028342248072444447,
+  "truncation_rate": 0.013962987662554185,
+  "no_answer_rate": 0.01197274091363788,
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "max_tokens": 8192,
+    "enable_thinking": false
+  },
+  "pass@4": 0.9137283856523603,
+  "pass@4_stderr": 0.0023410051787935847,
+  "pass@8": 0.9350616872290763,
+  "pass@8_stderr": 0.002249937765901194,
+  "mean_gen_tokens": 951.0981160386796,
+  "gen_seconds": 1218.0764327049255,
+  "merged_from_shards": 8
+}

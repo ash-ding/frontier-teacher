@@ -1,0 +1,25 @@
+{
+  "tag": "llama32-3b__aime",
+  "model": "unsloth/Llama-3.2-3B-Instruct",
+  "config": "llama32-3b",
+  "task": "aime",
+  "n_problems": 150,
+  "samples_per_problem": 8,
+  "pass@1": 0.06333333333333334,
+  "pass@1_stderr": 0.0126664900493986,
+  "truncation_rate": 0.08333333333333333,
+  "no_answer_rate": 0.11333333333333333,
+  "mean_gen_tokens": 1010.225,
+  "gen_seconds": 78.2723138332367,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "top_k": -1,
+    "max_tokens": 4096,
+    "enable_thinking": null
+  },
+  "pass@4": 0.15266666666666667,
+  "pass@4_stderr": 0.02607612212239568,
+  "pass@8": 0.2,
+  "pass@8_stderr": 0.03276927682076162
+}

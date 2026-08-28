@@ -1,0 +1,23 @@
+{
+  "tag": "llama32-3b__math500",
+  "model": "unsloth/Llama-3.2-3B-Instruct",
+  "config": "llama32-3b",
+  "task": "math500",
+  "n_problems": 500,
+  "samples_per_problem": 4,
+  "pass@1": 0.3875,
+  "pass@1_stderr": 0.017364923874360196,
+  "truncation_rate": 0.0325,
+  "no_answer_rate": 0.107,
+  "mean_gen_tokens": 573.1325,
+  "gen_seconds": 66.62274837493896,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "top_k": -1,
+    "max_tokens": 4096,
+    "enable_thinking": null
+  },
+  "pass@4": 0.606,
+  "pass@4_stderr": 0.02187429930168918
+}

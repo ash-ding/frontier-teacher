@@ -1,0 +1,25 @@
+# Per-problem profiling records over the 12k pool: 12-36 MB each, regenerable
+# from the shards with src/merge_shards.py. Benchmark records (MATH-500 / AIME)
+# are small and ARE tracked, under results/benchmarks/.
+outputs/
+*__mathtrain.records.jsonl
+*__s[0-9]of[0-9].records.jsonl
+*__s[0-9]of[0-9].summary.json
+
+# Raw generations: ~880 MB per model. Live on the compute nodes under
+# $HOME/data/frontier-teacher/generations/.
+generations/
+
+# Built datasets - regenerate with data/build_datasets.py and
+# data/build_math_train.py rather than committing them.
+data/math500.jsonl
+data/aime_2020_2024.jsonl
+data/math_train_12k.jsonl
+
+# Environment / local noise
+.secrets/
+logs/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store

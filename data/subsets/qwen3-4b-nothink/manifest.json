@@ -1,0 +1,113 @@
+{
+  "model_tag": "qwen3-4b-nothink",
+  "model_id": "Qwen/Qwen3-4B (enable_thinking=false)",
+  "profiled_with": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "max_tokens": 8192,
+    "samples_per_problem": 8,
+    "engine": "vLLM 0.27.1",
+    "seed": 1234
+  },
+  "source_pool": "nlile/hendrycks-MATH-benchmark train split, deduplicated to 11,996",
+  "pool_policy": "full",
+  "pool_note": "full MATH train pool; no differential contamination detected",
+  "pool_size": 11996,
+  "sampling": {
+    "method": "uniform without replacement",
+    "seed": 20260828
+  },
+  "subsets": [
+    {
+      "file": "qwen3-4b-nothink__pass1_eq_0__n700.jsonl",
+      "band": "p = 0",
+      "pool_size": 779,
+      "sampled": 700,
+      "mean_pass_at_1": 0.0,
+      "level_dist": {
+        "1": 6,
+        "2": 39,
+        "3": 62,
+        "4": 116,
+        "5": 477
+      },
+      "split_origin_dist": {
+        "orig_test": 222,
+        "orig_train": 478
+      }
+    },
+    {
+      "file": "qwen3-4b-nothink__pass1_eq_25pct__n200.jsonl",
+      "band": "p = 25%",
+      "pool_size": 288,
+      "sampled": 200,
+      "mean_pass_at_1": 0.25,
+      "level_dist": {
+        "1": 1,
+        "2": 9,
+        "3": 16,
+        "4": 47,
+        "5": 127
+      },
+      "split_origin_dist": {
+        "orig_test": 72,
+        "orig_train": 128
+      }
+    },
+    {
+      "file": "qwen3-4b-nothink__pass1_eq_50pct__n200.jsonl",
+      "band": "p = 50%",
+      "pool_size": 294,
+      "sampled": 200,
+      "mean_pass_at_1": 0.5,
+      "level_dist": {
+        "1": 4,
+        "2": 13,
+        "3": 17,
+        "4": 63,
+        "5": 103
+      },
+      "split_origin_dist": {
+        "orig_test": 69,
+        "orig_train": 131
+      }
+    },
+    {
+      "file": "qwen3-4b-nothink__pass1_eq_75pct__n500.jsonl",
+      "band": "p = 75%",
+      "pool_size": 510,
+      "sampled": 500,
+      "mean_pass_at_1": 0.75,
+      "level_dist": {
+        "1": 14,
+        "2": 37,
+        "3": 73,
+        "4": 143,
+        "5": 233
+      },
+      "split_origin_dist": {
+        "orig_test": 177,
+        "orig_train": 323
+      }
+    },
+    {
+      "file": "qwen3-4b-nothink__pass1_eq_1__n500.jsonl",
+      "band": "p = 1",
+      "pool_size": 8199,
+      "sampled": 500,
+      "mean_pass_at_1": 1.0,
+      "level_dist": {
+        "1": 48,
+        "2": 106,
+        "3": 138,
+        "4": 124,
+        "5": 84
+      },
+      "split_origin_dist": {
+        "orig_test": 197,
+        "orig_train": 303
+      }
+    }
+  ]
+}

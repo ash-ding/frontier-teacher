@@ -1,0 +1,107 @@
+{
+  "model_tag": "llama32-3b",
+  "model_id": "unsloth/Llama-3.2-3B-Instruct",
+  "profiled_with": {
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "max_tokens": 4096,
+    "samples_per_problem": 32,
+    "engine": "vLLM 0.27.1",
+    "seed": 1234
+  },
+  "source_pool": "nlile/hendrycks-MATH-benchmark train split, deduplicated to 11,996",
+  "pool_policy": "clean",
+  "pool_note": "split_origin == orig_test; original-train problems excluded (contamination)",
+  "pool_size": 4498,
+  "sampling": {
+    "method": "uniform without replacement",
+    "seed": 20260828
+  },
+  "subsets": [
+    {
+      "file": "llama32-3b__pass1_eq_0__n800.jsonl",
+      "band": "p = 0",
+      "pool_size": 814,
+      "sampled": 800,
+      "mean_pass_at_1": 0.0,
+      "level_dist": {
+        "1": 11,
+        "2": 44,
+        "3": 94,
+        "4": 203,
+        "5": 448
+      },
+      "split_origin_dist": {
+        "orig_test": 800
+      }
+    },
+    {
+      "file": "llama32-3b__pass1_05-15pct__n400.jsonl",
+      "band": "5% <= p < 15%",
+      "pool_size": 487,
+      "sampled": 400,
+      "mean_pass_at_1": 0.087265625,
+      "level_dist": {
+        "1": 6,
+        "2": 42,
+        "3": 84,
+        "4": 109,
+        "5": 159
+      },
+      "split_origin_dist": {
+        "orig_test": 400
+      }
+    },
+    {
+      "file": "llama32-3b__pass1_40-60pct__n500.jsonl",
+      "band": "40% <= p <= 60%",
+      "pool_size": 570,
+      "sampled": 500,
+      "mean_pass_at_1": 0.4948125,
+      "level_dist": {
+        "1": 39,
+        "2": 95,
+        "3": 137,
+        "4": 133,
+        "5": 96
+      },
+      "split_origin_dist": {
+        "orig_test": 500
+      }
+    },
+    {
+      "file": "llama32-3b__pass1_85-95pct__n400.jsonl",
+      "band": "85% < p < 95%",
+      "pool_size": 437,
+      "sampled": 400,
+      "mean_pass_at_1": 0.90875,
+      "level_dist": {
+        "1": 91,
+        "2": 117,
+        "3": 111,
+        "4": 55,
+        "5": 26
+      },
+      "split_origin_dist": {
+        "orig_test": 400
+      }
+    },
+    {
+      "file": "llama32-3b__pass1_eq_1__n100.jsonl",
+      "band": "p = 1",
+      "pool_size": 131,
+      "sampled": 100,
+      "mean_pass_at_1": 1.0,
+      "level_dist": {
+        "1": 29,
+        "2": 31,
+        "3": 24,
+        "4": 15,
+        "5": 1
+      },
+      "split_origin_dist": {
+        "orig_test": 100
+      }
+    }
+  ]
+}
