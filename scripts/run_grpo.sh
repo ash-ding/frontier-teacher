@@ -10,6 +10,11 @@
 #
 # Batch sizes are chosen so every run consumes 512 rollouts per step, which puts
 # all nine curves on a common x-axis.
+#
+# trainer.use_v1=False: verl 0.9.0's v1 trainer imports `transfer_queue`, which is
+# neither on PyPI nor declared as a verl dependency - a packaging gap in the
+# release. The v0 path (verl.trainer.ppo.ray_trainer) imports cleanly and reads
+# the same reward.* config keys.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$PWD"
@@ -39,7 +44,12 @@ TRAIN="${SUB%.jsonl}.verl.jsonl"
 [ -f "$TRAIN" ] || python src/to_verl_dataset.py --subset "$SUB"
 
 EXP="${CFG}__${BAND}"
-CKPT="$HOME/data/frontier-teacher/checkpoints/$EXP"   # container disk cannot hold 36 checkpoints
+# Checkpoints go to the LOCAL container disk, not ~/data. One checkpoint is 26 GB
+# with optimizer state dropped, so the 36 across all runs would be ~940 GB of
+# writes over the rclone bucket mount. The orchestrator evaluates each run's
+# checkpoints on the same node and deletes them before the next run starts;
+# per-run peak is 4 x 26 GB = 104 GB against 174 GB free.
+CKPT="$REPO/outputs/checkpoints/$EXP"
 mkdir -p "$CKPT" logs
 
 echo "=== $EXP ==="
@@ -58,12 +68,14 @@ python -m verl.trainer.main_ppo \
   actor_rollout_ref.model.path="$MODEL" \
   actor_rollout_ref.actor.ppo_mini_batch_size=$MB \
   actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
+  actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
+  actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4 \
   actor_rollout_ref.actor.optim.lr=1e-6 \
   actor_rollout_ref.actor.use_kl_loss=True \
   actor_rollout_ref.actor.kl_loss_coef=0.001 \
   actor_rollout_ref.actor.kl_loss_type=low_var_kl \
   actor_rollout_ref.actor.entropy_coeff=0 \
-  actor_rollout_ref.actor.checkpoint.save_contents='[model,optimizer,extra,hf_model]' \
+  actor_rollout_ref.actor.checkpoint.save_contents='[model,hf_model]' \
   actor_rollout_ref.rollout.name=vllm \
   actor_rollout_ref.rollout.n=$G \
   actor_rollout_ref.rollout.temperature=$TEMP \
@@ -73,6 +85,7 @@ python -m verl.trainer.main_ppo \
   actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \
   reward.custom_reward_function.path="$REPO/src/verl_reward.py" \
   reward.custom_reward_function.name=compute_score \
+  trainer.use_v1=False \
   trainer.n_gpus_per_node=$NGPU \
   trainer.nnodes=1 \
   trainer.logger='[console]' \
