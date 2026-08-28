@@ -1,20 +1,29 @@
 #!/usr/bin/env bash
-# Launch all 6 (config, task) jobs concurrently, one GPU each.
+# Baseline evaluation: every (config, task) pair over the three benchmarks,
+# one GPU each, with raw generations saved.
+#
+# Generations were NOT saved on the first pass, which is why the original six
+# baseline runs have no reasoning traces - the data does not exist anywhere.
+# Do not remove --save-generations.
 set -u
 cd "$(dirname "$0")/.."
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate frontier-teacher
-mkdir -p logs outputs
+
+CONFIGS="${CONFIGS:-llama32-3b qwen3-4b-think qwen3-4b-nothink}"
+TASKS="${TASKS:-math500 aime hmmt}"
+GENDIR="$HOME/data/frontier-teacher/generations"
+mkdir -p logs outputs "$GENDIR"
 
 i=0
-for cfg in llama32-3b qwen3-4b-think qwen3-4b-nothink; do
-  for task in math500 aime; do
+for cfg in $CONFIGS; do
+  for task in $TASKS; do
     log="logs/${cfg}__${task}.log"
-    CUDA_VISIBLE_DEVICES=$i VLLM_LOGGING_LEVEL=WARNING \
+    CUDA_VISIBLE_DEVICES=$((i % 8)) VLLM_LOGGING_LEVEL=WARNING \
       nohup python src/evaluate.py --config "configs/${cfg}.yaml" --task "$task" \
-      > "$log" 2>&1 &
-    echo "gpu $i  ${cfg}/${task}  pid $!  -> $log"
+        --save-generations "$GENDIR" > "$log" 2>&1 &
+    echo "  gpu $((i % 8))  ${cfg}/${task}  pid $!"
     i=$((i+1))
   done
 done
-echo "launched $i jobs; wait with: tail -f logs/*.log"
+echo "launched $i jobs; follow with: tail -f logs/*.log"

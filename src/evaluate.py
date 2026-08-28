@@ -36,9 +36,18 @@ def main():
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--num-shards", type=int, default=1)
     ap.add_argument("--save-generations", default="", help="dir for full raw model output")
+    ap.add_argument("--model", default="", help="override cfg['model'] - e.g. a checkpoint dir")
+    ap.add_argument("--name", default="", help="override cfg['name'], which forms the output tag")
     args = ap.parse_args()
 
     cfg = yaml.safe_load(open(args.config))
+    # Overrides let one config evaluate a checkpoint without authoring a near-copy
+    # of it. --name matters: cfg["name"] forms the output tag, so evaluating a
+    # checkpoint under the base name would overwrite that model's baseline.
+    if args.model:
+        cfg["model"] = args.model
+    if args.name:
+        cfg["name"] = args.name
     if args.task not in cfg["tasks"]:
         raise SystemExit(f"task {args.task!r} not in {args.config}; have {sorted(cfg['tasks'])}")
     task = cfg["tasks"][args.task]
