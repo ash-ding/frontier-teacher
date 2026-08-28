@@ -26,9 +26,9 @@ BAND="${2:?usage: run_grpo.sh <config-name> <band-slug> [n_gpus]}"
 NGPU="${3:-8}"
 
 case "$CFG" in
-  llama32-3b)       MODEL=unsloth/Llama-3.2-3B-Instruct; MAXRESP=4096;  TEMP=0.6; TOPP=0.9;  TOPK=-1; TPLKW='{}' ;;
-  qwen3-4b-nothink) MODEL=Qwen/Qwen3-4B;                 MAXRESP=8192;  TEMP=0.7; TOPP=0.8;  TOPK=20; TPLKW='{enable_thinking:false}' ;;
-  qwen3-4b-think)   MODEL=Qwen/Qwen3-4B;                 MAXRESP=12288; TEMP=0.6; TOPP=0.95; TOPK=20; TPLKW='{enable_thinking:true}' ;;
+  llama32-3b)       MODEL=unsloth/Llama-3.2-3B-Instruct; MAXRESP=4096;  TEMP=0.6; TOPP=0.9;  TOPK=-1; THINK='' ;;
+  qwen3-4b-nothink) MODEL=Qwen/Qwen3-4B;                 MAXRESP=8192;  TEMP=0.7; TOPP=0.8;  TOPK=20; THINK=false ;;
+  qwen3-4b-think)   MODEL=Qwen/Qwen3-4B;                 MAXRESP=12288; TEMP=0.6; TOPP=0.95; TOPK=20; THINK=true ;;
   *) echo "unknown config $CFG"; exit 1 ;;
 esac
 
@@ -64,7 +64,6 @@ python -m verl.trainer.main_ppo \
   data.train_batch_size=$TB \
   data.max_prompt_length=1024 \
   data.max_response_length=$MAXRESP \
-  data.apply_chat_template_kwargs="$TPLKW" \
   actor_rollout_ref.model.path="$MODEL" \
   actor_rollout_ref.actor.ppo_mini_batch_size=$MB \
   actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
@@ -97,4 +96,5 @@ python -m verl.trainer.main_ppo \
   trainer.project_name=frontier-teacher \
   trainer.experiment_name="$EXP" \
   trainer.default_local_dir="$CKPT" \
+  ${THINK:+ +data.apply_chat_template_kwargs.enable_thinking=$THINK} \
   "${@:4}"
