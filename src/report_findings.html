@@ -4,23 +4,46 @@ gains <strong>+2.2</strong> points and AIME gains nothing (−0.7, not significa
 Over the second 5,120 the pattern inverts: MATH-500 adds <strong>+0.1</strong>
 and AIME adds <strong>+5.0</strong>. The same reversal appears in all three
 non-thinking bands, at p = 0.008 / 0.002 / 0.009 — three independent replications
-of the same effect.</p>
-<p>Stopping at 5,120 rollouts because MATH-500 had flattened would have produced
-the conclusion that nothing transferred.</p>
+of one effect.</p>
+<p>An early-stop rule watching MATH-500 flatten would have stopped at the halfway
+point and concluded that nothing transferred.</p>
 
-<h3>For the student, only the hard band transfers</h3>
-<p>On MATH-500 Llama's three bands are indistinguishable — +5.0, +5.3, +6.0, with
-intervals that overlap almost entirely; if anything the <em>easy</em> band is
-best. On AIME they separate. The hard band rises at every checkpoint
+<h3>The two models disagree about whether difficulty matters</h3>
+<p>For <strong>Llama</strong>, MATH-500 cannot tell the bands apart — +5.0, +6.3,
++6.0, intervals almost fully overlapping, the <em>easy</em> band nominally
+highest. AIME can. The hard band rises at every checkpoint
 (12.0 → 12.8 → 14.5 → 16.0 → 17.0, +4.9, p = 0.018) and is still rising when the
-budget runs out. The medium and easy bands give +2.2 and +1.8, neither
-distinguishable from zero.</p>
-<p>Difficulty does not change how much a model gains on the distribution it
-trained on. It changes whether the gain leaves that distribution.</p>
+budget ends; a specific monotone ordering has probability 1/24 under no trend.
+The medium band, re-run with its group size matched to the extremes so only
+difficulty differs, goes to <strong>+0.1</strong> — up to 16.0 and back down to
+12.1, ending where it started.</p>
+<p>For <strong>Qwen3-4B non-thinking</strong>, matched the same way, every band
+transfers at similar magnitude: AIME +4.3 / +5.5 / +4.8 across hard, medium and
+easy, with the medium band the strongest cell overall.</p>
+<p>The two configurations differ in nearly everything that could explain this —
+39.1% against 83.4% on MATH-500, an AIME baseline of 12.0% near the floor against
+36.0% that is not, and a band called &ldquo;hard&rdquo; meaning 5–15% pass@1 for
+one and 12–25% for the other. <strong>This data supports no difficulty-band
+prescription that carries across models.</strong> What it does show is that the
+question is invisible in-domain: on MATH-500 the bands are indistinguishable for
+both configurations.</p>
+
+<h3>The strongest configuration cannot be taught this way at all</h3>
+<p>Qwen3-4B in thinking mode moves on nothing. Across three bands and three
+benchmarks, every interval covers zero: MATH-500 −0.1 to +0.1, AIME −0.1 to +2.2,
+HMMT +0.4 to +1.9. The training itself ran normally. There is simply nothing for
+plain GRPO to hold on to — the model already scores 95.9% on MATH-500, and
+<strong>92.9% of the 12k training pool produces no gradient at all</strong>,
+because every rollout in a group is correct or every one is wrong. Its three
+bands are cut from the 851 problems that remain.</p>
+<p>This is the gap the project exists to probe. On-policy sampling can only teach
+what the model already sometimes gets right; where it does not, the signal is not
+weak but absent, and a teacher's trajectory is the only thing that could supply
+one.</p>
 
 <h3>HMMT cannot resolve anything for a 3B model</h3>
-<p>Llama's HMMT baseline is 1.8% pass@4 — 10 correct samples out of 1,488,
-spread over 4 of 93 problems. Solving two more problems doubles the metric, and
-all three bands wander between 1.5% and 4.1% with no trend. It is reported for
-completeness, not as evidence. HMMT separates the two Qwen configurations
-cleanly (20.5% against 57.0%), which is what it was added for.</p>
+<p>Llama's HMMT baseline is 1.8% pass@4 — 10 correct samples out of 1,488, spread
+over 4 of 93 problems. Solving two more problems doubles the metric, and all
+three bands wander between 1.5% and 4.1% with no trend. It is reported for
+completeness, not as evidence. HMMT separates the two Qwen configurations cleanly
+(20.5% against 57.0%), which is what it was added for.</p>

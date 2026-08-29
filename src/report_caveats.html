@@ -3,20 +3,29 @@
 answer whether movement happens and whether it differs by band. Several are still
 rising at the last point.</p></div>
 <ul>
-<li><strong>The middle band is confounded.</strong> Holding rollouts per step
-fixed means group size also fixes how many distinct problems a step covers
-(512/G): the middle bands saw 64 problems per step against the extremes' 16, and
-four times the data over a run. A matched-group-size re-run is the dashed line;
-where it is absent, no middle-band comparison should be read as difficulty alone.</li>
+<li><strong>The two matched controls disagree about the confound's sign.</strong>
+Group size ties to the band, so at a fixed 512 rollouts per step the middle bands
+also covered four times as many distinct problems. Re-running them at matched
+group size — the dashed lines — <em>hurt</em> Llama on AIME (+2.2 to +0.1) and
+<em>helped</em> non-thinking on all three (AIME +4.0 to +5.5). With no consistent
+direction, those differences are inside what a five-point curve resolves. Neither
+control overturns anything; the thinking control has not landed yet.</li>
 <li><strong>The thinking rows carry a confound that cannot be removed.</strong>
-Qwen3-4B in thinking mode has only 851 problems in the whole 12k pool with
-0 &lt; pass@1 &lt; 1, so its hard band is 100 problems seen 3.2 times while its
-easy band is 400 seen 0.8 times. Its MATH-500 row is also at ceiling — 95.9%
-before training.</li>
+Only 851 problems in the whole 12k pool have 0 &lt; pass@1 &lt; 1 for this
+configuration, so its hard band is 100 problems seen 3.2 times while its easy
+band is 400 seen 0.8 times. Equalising them would mean throwing away three
+quarters of the larger bands.</li>
 <li><strong>One cell is incomplete.</strong> The thinking hard band ran out of GPU
 memory at step 19 of 20 and has no 10,240-rollout endpoint; its last point is
-marked with a ring and is not comparable with the other endpoints.</li>
+ringed and is not comparable with the other endpoints.</li>
+<li><strong>Evaluation has real run-to-run variance.</strong> Two runs of the
+identical AIME evaluation over the identical 150 problems returned pass@4 15.3%
+and 12.0% — vLLM's batching makes even a fixed seed non-reproducible across shard
+layouts. Every interval quoted here bootstraps over generations as well as
+problems for that reason; resampling problems alone understates them by about a
+third.</li>
 <li><strong>Llama's training pool excludes contaminated problems.</strong> It
 scores 61.0% on problems from the original MATH train split against 40.3% on
-test-derived ones, so its bands draw only from the 4,498 clean problems.</li>
+test-derived ones, so its bands draw only from the 4,498 clean problems. The Qwen
+bands use the full pool, where no such asymmetry is detectable.</li>
 </ul>

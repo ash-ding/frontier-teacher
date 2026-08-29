@@ -86,6 +86,7 @@ def panel(series, task, cfg):
         out.append(f'<text class="tick" x="{X(xv):.1f}" y="{H-10}" '
                    f'text-anchor="middle">{xv//1000 if xv else 0}{"k" if xv else ""}</text>')
 
+    labels = []
     for s in rows:
         role = role_of(s["band"])
         slot = slot_of(role)
@@ -101,16 +102,37 @@ def panel(series, task, cfg):
             out.append(f'<circle class="dot s{slot}" cx="{X(x):.1f}" cy="{Y(y):.1f}" r="3.2">'
                        f'<title>{BAND_LABEL[role]} · {x:,} rollouts · {y:.1f}%</title></circle>')
         ex, ey = pts[-1]
-        delta = ey - base if base is not None else None
-        if delta is not None:
-            sign = "+" if delta >= 0 else "−"
-            anchor = "end" if ex >= xmax else "start"
-            dx = -4 if anchor == "end" else 4
-            out.append(f'<text class="endlab s{slot}" x="{X(ex)+dx:.1f}" '
-                       f'y="{Y(ey)-6:.1f}" text-anchor="{anchor}">'
-                       f'{sign}{abs(delta):.1f}</text>')
         if not s.get("reaches_10240", True):
             out.append(f'<circle class="stop" cx="{X(ex):.1f}" cy="{Y(ey):.1f}" r="6.5"/>')
+        if base is not None:
+            delta = ey - base
+            sign = "+" if delta >= 0 else "−"
+            anchor = "end" if ex >= xmax else "start"
+            labels.append({"x": X(ex) + (-4 if anchor == "end" else 4),
+                           "y": Y(ey) - 6, "anchor": anchor, "slot": slot,
+                           "text": f"{sign}{abs(delta):.1f}"})
+
+    # Three lines that end at similar scores put their labels on top of each
+    # other - 10 collisions across 5 panels before this. Dodge vertically:
+    # order by position, force a minimum gap, then shift the group back inside
+    # the panel if the last one has been pushed past the axis.
+    GAP = 11.0
+    labels.sort(key=lambda l: l["y"])
+    for i in range(1, len(labels)):
+        if labels[i]["y"] - labels[i - 1]["y"] < GAP:
+            labels[i]["y"] = labels[i - 1]["y"] + GAP
+    if labels:
+        overflow = labels[-1]["y"] - (H - PAD_B - 2)
+        if overflow > 0:
+            for l in labels:
+                l["y"] -= overflow
+        under = PAD_T + 8 - labels[0]["y"]
+        if under > 0:
+            for l in labels:
+                l["y"] += under
+    for l in labels:
+        out.append(f'<text class="endlab s{l["slot"]}" x="{l["x"]:.1f}" '
+                   f'y="{l["y"]:.1f}" text-anchor="{l["anchor"]}">{l["text"]}</text>')
     out.append("</svg>")
     return '<div class="panel">' + "".join(out) + "</div>"
 
