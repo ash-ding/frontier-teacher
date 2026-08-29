@@ -423,10 +423,35 @@ worse, from +2.2 to +0.1, while MATH-500 improves from +5.3 to +6.3. Its AIME
 trajectory rises and comes back down (12.0 → 14.9 → 16.0 → 13.7 → 12.1), ending
 where it started, against the hard band's strictly monotone 12.0 → 17.0.
 
-So with every setting matched and only difficulty varying: **MATH-500 gains are
-the same across bands (+5.0 / +6.3 / +6.0) and the AIME gain belongs to the hard
-band alone.** The extra data the middle band had been getting was, if anything,
-inflating its apparent transfer.
+So for Llama, with every setting matched and only difficulty varying: **MATH-500
+gains are the same across bands (+5.0 / +6.3 / +6.0) and the AIME gain belongs to
+the hard band alone.**
+
+The non-thinking control moves the other way, which is worth stating plainly
+rather than picking the reading that suits:
+
+| Qwen3-4B non-thinking, middle band | MATH-500 | AIME pass@4 | HMMT pass@4 |
+|---|---|---|---|
+| G=8, confounded | 87.3 **+4.0** | 40.0 +4.0 [−0.9, 8.9] | 23.3 +2.7 [−1.3, 7.2] |
+| **G=32, matched** | 88.4 **+5.1** [2.9, 7.1] | 41.6 **+5.5** [0.3, 11.2] | 24.7 +4.2 [−0.2, 8.8] |
+
+Matching *helped* the non-thinking middle band on all three benchmarks where it
+*hurt* Llama's on AIME. The two controls therefore do not identify a consistent
+direction for the confound, and the honest conclusion is that the G=8 / G=32
+differences are themselves inside the noise these five-point curves can resolve.
+What survives is that the controls do not overturn anything: Llama's hard band
+still owns the only AIME gain that clears zero, and non-thinking still transfers
+from every band.
+
+**The two models disagree, and that is a result rather than a defect.** For
+non-thinking, matched, all three bands transfer to AIME and HMMT at similar
+magnitude (+4.3 / +5.5 / +4.8 on AIME) and the middle band is the strongest cell
+overall. For Llama only the hard band transfers at all. The configurations differ
+in almost every way that could matter — Llama sits at 39.1% on MATH-500 against
+83.4%, its AIME baseline of 12.0% is close to the floor where non-thinking's 36%
+is not, and a band labelled "hard" means 5–15% pass@1 for one and 12–25% for the
+other. Nothing here separates those explanations; a difficulty-band prescription
+that transfers across models is not supported by this data.
 
 ### The rollout length cap changes what the reward measures
 
