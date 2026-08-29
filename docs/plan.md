@@ -9,18 +9,24 @@ Everything below runs on three 8×H100 nodes under one shared environment
 
 ---
 
-## 1. GRPO training — running
+## 1. GRPO training — done, with three loose ends
 
-Nine runs (3 configurations × 3 difficulty bands) are in flight; see
-`docs/experiment.md` §7 for the design and for two findings that came out of
-setting it up. Remaining work once they land:
+Nine runs (3 configurations × 3 difficulty bands) plus two matched-group-size
+controls are complete; `docs/experiment.md` §7 has the design, the results, and
+the operational failures worth knowing about. The report is rendered by
+`src/render_report.py` from `outputs/curves.json`.
 
-- [ ] `src/collect_curves.py` over all nine, then the 3×3 figure — one row per
-      benchmark, one column per configuration, three band lines per panel, with
-      the §1 baseline as each line's rollout = 0 point.
-- [ ] Verify each line's rollout = 0 point equals the §1 baseline. If it does
-      not, training and evaluation are not scoring the same thing.
-- [ ] Fold the completed numbers into `docs/experiment.md` §7.
+- [ ] **The thinking matched control** (`GROUP_SIZE=32` on `pass1_37-62pct`) is
+      the last run outstanding. It is a control on a null result, so it changes
+      nothing already concluded.
+- [ ] **The thinking hard band has no 10,240-rollout endpoint.** It OOMed at step
+      19 of 20 and its final checkpoint does not exist. Four points, ringed in the
+      figure. Re-running costs ~6 h of training; the cell shows no movement at any
+      of its four points, so the endpoint would very likely be another null.
+- [ ] **Llama's hard band was still rising when the budget ran out.** Extending it
+      to 40 steps (20,480 rollouts) is ~35 min of training plus ~45 min of
+      evaluation and is the cheapest way to learn whether the one transfer effect
+      in the study plateaus or continues. This is the highest-value open item.
 
 **Watch for:** the p = 0 and p = 1 sets exist precisely because plain GRPO cannot
 use them — they normalise to zero advantage. They are there for teacher-side
@@ -32,28 +38,41 @@ sampling cannot. Do not put them in a plain GRPO run and expect anything.
 ## 2. Teacher-side training — the actual experiment
 
 §1 is the control: plain GRPO, no teacher. Nothing in the repository has yet used
-a frontier model's trajectories, which is the question it exists to answer.
+a frontier model's trajectories, which is the question it exists to answer — and
+§1 now says something specific about where a teacher would have to help.
+
+Qwen3-4B in thinking mode moved on nothing, across three bands and three
+benchmarks, and the reason is structural rather than a tuning failure: **92.9% of
+the 12k pool produces no gradient for it at all**, because every rollout in the
+group is correct or every one is wrong. On-policy sampling can only teach what
+the model already sometimes gets right. Where it does not, the signal is not weak
+but absent — which is exactly the region a teacher's trajectory could supply.
 
 - [ ] Decide what the teacher supplies — full trajectories, hints, or a curriculum
-      over the bands — and which of the nine control curves each variant is
-      measured against.
+      over the bands — and which control curve each variant is measured against.
+- [ ] The `p = 0` subsets are the natural first target: 800 problems for Llama,
+      200 for thinking. Plain GRPO provably cannot use them, so any movement there
+      is attributable to the teacher rather than to more compute.
 
 ---
 
 ## 3. Re-profile the zero-gradient problems at higher n
 
-Both Qwen configurations have problems that are never solved in 8 samples: 779
-for non-thinking, 295 for thinking. At `p = 0` they contribute no gradient, but
-some fraction would land at 1/32 or 2/32 under more sampling — converting dead
-weight into exactly the hard, trainable problems this project wants.
+Promoted from "low value". §7's headline for the thinking configuration is that
+92.9% of its pool yields no gradient, and that number is measured at n = 8 — a
+problem solved 1 time in 32 is indistinguishable from one never solved at all.
+Some fraction of the 295 thinking and 779 non-thinking `p = 0` problems are
+really at 1/32 or 2/32, i.e. exactly the hard-but-reachable problems this project
+wants, and they are currently being written off.
 
-- [ ] Re-profile just those problems at n = 32. Cheap because the sets are small:
-      ~10 min for non-thinking, ~1 h for thinking, against 1.5 h and 20 h for a
-      full-pool re-profile.
+- [ ] Re-profile the `p = 0` sets at n = 32. Cheap because they are small: ~10 min
+      for non-thinking, ~1 h for thinking, against 1.5 h and 20 h for a full-pool
+      re-profile.
+- [ ] If it recruits enough problems, the thinking hard band stops being 100
+      problems seen 3.2 times — the confound §7 currently cannot remove.
 
-Low value now. Qwen serves only as a reference point — not as the student, and
-not as the teacher — and a reference point's pass@1 is already measured. Worth
-revisiting only if a Qwen configuration is wanted as a training target after all.
+It also puts a number on the claim itself. "92.9% produces no gradient" is the
+evidence for needing a teacher at all; it should not rest on n = 8.
 
 ---
 
@@ -71,6 +90,13 @@ Smaller items, each closing a real gap rather than tidying.
       no error and no visibility from the other nodes. Any backup to `~/data`
       should verify by reading back from a different node (allow 90s for
       propagation).
+- [ ] **Baseline files drift between nodes, and the failure is silent.** Three
+      separate times a paired analysis either refused to run or ran against the
+      wrong numbers because a node held an older copy of a `__{task}.records.jsonl`
+      baseline — record ids `aime-0000` against the current `aime-2020-00`, or the
+      HMMT baseline simply absent. Scores are identical either way, so nothing
+      looks wrong until the ids fail to intersect. The baselines belong in one
+      place with a checksum, not copied per node by hand.
 - [ ] **Disable auto-resume everywhere else it could bite.** `run_grpo.sh` now
       sets `resume_mode=disable`, but any future trainer entry point inherits
       verl's default of resuming from whatever checkpoint directory it finds.

@@ -440,6 +440,23 @@ equally so for every model.
 
 The data is redistributed from MathArena under CC BY-NC-SA 4.0.
 
+## Results
+
+The nine GRPO runs and their controls are written up in
+[`docs/experiment.md`](docs/experiment.md) §7, and rendered as a figure by
+`src/render_report.py` from `outputs/curves.json`:
+
+```
+python src/collect_curves.py                    # summaries -> outputs/curves.json
+python src/render_report.py --out report.html   # 3x3 small multiples, no plotting deps
+```
+
+Headline: every configuration except Qwen3-4B-thinking gains in-domain from plain
+GRPO, the out-of-domain gain arrives only in the second half of training long
+after MATH-500 has flattened, and the thinking configuration moves on nothing at
+all because 92.9% of the training pool produces no gradient for it. That last
+number is the case for a teacher.
+
 ## Curated subsets
 
 `data/further_improve/<model>/`, one JSONL per difficulty band. Filenames encode the
