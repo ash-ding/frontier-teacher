@@ -332,6 +332,85 @@ differently by band", nothing stronger. The thinking middle band is thinner
 still: 200 problems over 20 steps is 6.4 epochs, so a rise there is as plausibly
 memorisation of 200 items as learning.
 
+### Results: six of nine cells
+
+Change from the untrained model at 10,240 rollouts, with a two-level bootstrap
+over both problems and generations. Bold is an interval clear of zero.
+
+**Llama-3.2-3B** — baseline 39.1 / 12.0 / 1.8
+
+| Band | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
+|---|---|---|---|
+| hard, 5–15% | 44.0 **+5.0** [2.1, 8.1] | 17.0 **+4.9** [0.3, 8.9] | 2.1 +0.3 [−1.7, 2.4] |
+| medium, 40–60% | 44.4 **+5.3** [2.5, 8.3] | 14.3 +2.2 [−2.5, 6.4] | 2.8 +1.0 [−1.1, 3.5] |
+| easy, 85–95% | 45.1 **+6.0** [3.1, 9.0] | 13.8 +1.8 [−2.2, 5.7] | 2.3 +0.5 [−1.3, 2.5] |
+
+**Qwen3-4B non-thinking** — baseline 83.4 / 36.0 / 20.5
+
+| Band | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
+|---|---|---|---|
+| hard, 12–25% | 85.7 **+2.4** [0.4, 4.2] | 40.3 +4.3 [−0.1, 8.8] | 25.3 **+4.8** [0.4, 9.2] |
+| medium, 37–62% | 87.3 **+4.0** [1.9, 5.9] | 40.0 +4.0 [−0.9, 8.9] | 23.3 +2.7 [−1.3, 7.2] |
+| easy, 75–87% | 86.5 **+3.1** [1.1, 5.1] | 40.9 **+4.8** [0.0, 9.5] | 25.0 **+4.5** [0.2, 9.0] |
+
+**Every cell moves up on the benchmark its training data came from.** Plain GRPO
+on MATH problems improves MATH-500 for both configurations and all three bands.
+Nothing below disputes that; the interest is in what else moves, and when.
+
+#### The in-domain metric saturates where transfer begins
+
+Split each non-thinking run at 5,120 rollouts:
+
+| | first half | second half |
+|---|---|---|
+| MATH-500, hard band | **+2.2** (p = 0.001) | +0.1 (p = 0.46) |
+| AIME, hard band | −0.7 (p = 0.64) | **+5.0** (p = 0.008) |
+| AIME, medium band | −2.2 (p = 0.87) | **+6.1** (p = 0.002) |
+| AIME, easy band | +0.6 (p = 0.39) | **+4.2** (p = 0.009) |
+
+All three bands put their entire AIME gain in the second half and none of it in
+the first — three independent replications of the same reversal. Stopping at
+5,120 rollouts because MATH-500 had flattened, which is what a normal early-stop
+rule would do, produces the conclusion that nothing transferred.
+
+#### For the student, only the hard band transfers
+
+Llama's three bands are indistinguishable on MATH-500: +5.0, +5.3, +6.0, with
+intervals that overlap almost entirely, and the *easy* band nominally highest.
+On AIME they separate:
+
+| rollouts | 0 | 2,560 | 5,120 | 7,680 | 10,240 |
+|---|---|---|---|---|---|
+| hard | 12.0 | 12.8 | 14.5 | 16.0 | **17.0** |
+| medium | 12.0 | 14.3 | 14.7 | 14.0 | 14.3 |
+| easy | 12.0 | 13.2 | 15.2 | 12.6 | 13.8 |
+
+The hard band rises at every one of four checkpoints and is still rising when the
+budget ends. A specific monotone ordering has probability 1/24 under no trend,
+which together with the endpoint interval is what makes this more than one
+significant cell out of nine. The medium and easy bands are noise.
+
+Difficulty does not change how much the model gains on the distribution it
+trained on. It changes whether the gain leaves that distribution — and MATH-500
+alone cannot see the difference.
+
+#### HMMT resolves nothing for Llama, as predicted
+
+Baseline 1.8% pass@4 is 10 correct samples out of 1,488, over 4 of 93 problems.
+Two more problems solved doubles the metric. All three bands wander between 1.5%
+and 4.1% with no trend and no interval clear of zero. §1 said the floor would
+make this uninformative for a 3B model; it did.
+
+#### A caution on the non-thinking middle band
+
+It has the highest MATH-500 of the six cells (87.3) and the weakest transfer —
+the only cell whose AIME and HMMT intervals both cross zero. The tempting reading
+is that mid-difficulty problems buy in-domain fit at the cost of generalisation.
+The duller reading is that group size ties to the band, so the middle band also
+saw four times as many distinct problems and 1.28 epochs against the extremes'
+0.32. A matched-group-size re-run separates the two; until it lands, this cell
+supports no claim about difficulty.
+
 ### The rollout length cap changes what the reward measures
 
 The first thinking run was capped at 12,288 response tokens while evaluation
