@@ -9,16 +9,13 @@ Everything below runs on three 8×H100 nodes under one shared environment
 
 ---
 
-## 1. GRPO training — done, with three loose ends
+## 1. GRPO training — done, with two loose ends
 
-Nine runs (3 configurations × 3 difficulty bands) plus two matched-group-size
-controls are complete; `docs/experiment.md` §7 has the design, the results, and
+Nine runs (3 configurations × 3 difficulty bands) plus all three
+matched-group-size controls are complete; `docs/experiment.md` §7 has the design, the results, and
 the operational failures worth knowing about. The report is rendered by
 `src/render_report.py` from `outputs/curves.json`.
 
-- [ ] **The thinking matched control** (`GROUP_SIZE=32` on `pass1_37-62pct`) is
-      the last run outstanding. It is a control on a null result, so it changes
-      nothing already concluded.
 - [ ] **The thinking hard band has no 10,240-rollout endpoint.** It OOMed at step
       19 of 20 and its final checkpoint does not exist. Four points, ringed in the
       figure. Re-running costs ~6 h of training; the cell shows no movement at any

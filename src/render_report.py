@@ -182,6 +182,12 @@ def main():
                            f'<td>{tname} {metric}</td>{cells}'
                            f'<td class="delta">{d}</td></tr>')
     body = body.replace("<!--TABLE-->", "\n".join(trs))
+    # The setup strip was hand-typed and went stale as controls landed. Derive it.
+    runs = {(x["config"], x["band"], x.get("variant") or "") for x in series}
+    ctrls = sum(1 for r in runs if r[2])
+    evals = sum(len([q for q in x["points"] if q["rollouts"] > 0]) for x in series)
+    body = body.replace("<!--NRUNS-->", f"{len(runs) - ctrls}+{ctrls}")
+    body = body.replace("<!--NEVALS-->", str(evals))
     body = body.replace("<!--FINDINGS-->", Path(ROOT / "src" / "report_findings.html").read_text())
     body = body.replace("<!--CAVEATS-->", Path(ROOT / "src" / "report_caveats.html").read_text())
     Path(a.out).write_text(body)

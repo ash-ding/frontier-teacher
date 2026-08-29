@@ -136,17 +136,17 @@ strong{font-weight:600}
 <p class="lab">Frontier Teacher · GRPO pilot</p>
 <h1>Which problems teach?</h1>
 <p class="sub">Nine GRPO runs — three models, each trained on three bands of its
-own measured problem difficulty — plus one matched control, all evaluated on the
+own measured problem difficulty — plus matched controls, all evaluated on the
 same three benchmarks at a shared budget of 10,240 student rollouts. Plain GRPO,
 no teacher: the control that a teacher-side method has to beat.</p>
 
 <div class="setup">
-  <div><b>9+1</b><span>runs, with a control</span></div>
+  <div><b><!--NRUNS--></b><span>runs + controls</span></div>
   <div><b>10,240</b><span>rollouts each</span></div>
   <div><b>512</b><span>rollouts / step</span></div>
   <div><b>20</b><span>optimisation steps</span></div>
   <div><b>743</b><span>problems per evaluation</span></div>
-  <div><b>117</b><span>evaluations run</span></div>
+  <div><b><!--NEVALS--></b><span>evaluations run</span></div>
 </div>
 
 <div class="legend">

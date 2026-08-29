@@ -332,7 +332,7 @@ differently by band", nothing stronger. The thinking middle band is thinner
 still: 200 problems over 20 steps is 6.4 epochs, so a rise there is as plausibly
 memorisation of 200 items as learning.
 
-### Results: six of nine cells
+### Results: all nine cells and three controls
 
 Change from the untrained model at 10,240 rollouts, with a two-level bootstrap
 over both problems and generations. Bold is an interval clear of zero.
@@ -435,10 +435,15 @@ rather than picking the reading that suits:
 | G=8, confounded | 87.3 **+4.0** | 40.0 +4.0 [−0.9, 8.9] | 23.3 +2.7 [−1.3, 7.2] |
 | **G=32, matched** | 88.4 **+5.1** [2.9, 7.1] | 41.6 **+5.5** [0.3, 11.2] | 24.7 +4.2 [−0.2, 8.8] |
 
-Matching *helped* the non-thinking middle band on all three benchmarks where it
-*hurt* Llama's on AIME. The two controls therefore do not identify a consistent
-direction for the confound, and the honest conclusion is that the G=8 / G=32
-differences are themselves inside the noise these five-point curves can resolve.
+The thinking control, the third and last, leaves that configuration exactly where
+it was: MATH-500 +0.5 [−0.5, 1.6], AIME −0.2 [−3.9, 2.7], HMMT +0.5 [−3.1, 4.1].
+Matching the group size does not make a model with no usable gradient trainable.
+
+Matching *helped* the non-thinking middle band on all three benchmarks, *hurt*
+Llama's on AIME, and did nothing for thinking. The three controls therefore do
+not identify a consistent direction for the confound, and the honest conclusion
+is that the G=8 / G=32 differences are themselves inside the noise these
+five-point curves can resolve.
 What survives is that the controls do not overturn anything: Llama's hard band
 still owns the only AIME gain that clears zero, and non-thinking still transfers
 from every band.
