@@ -401,15 +401,32 @@ Two more problems solved doubles the metric. All three bands wander between 1.5%
 and 4.1% with no trend and no interval clear of zero. §1 said the floor would
 make this uninformative for a 3B model; it did.
 
-#### A caution on the non-thinking middle band
+#### The matched control confirms it rather than explaining it away
 
-It has the highest MATH-500 of the six cells (87.3) and the weakest transfer —
-the only cell whose AIME and HMMT intervals both cross zero. The tempting reading
-is that mid-difficulty problems buy in-domain fit at the cost of generalisation.
-The duller reading is that group size ties to the band, so the middle band also
-saw four times as many distinct problems and 1.28 epochs against the extremes'
-0.32. A matched-group-size re-run separates the two; until it lands, this cell
-supports no claim about difficulty.
+The middle bands were confounded: group size ties to the band, so at a fixed 512
+rollouts per step the middle band also covered 64 distinct problems per step
+against the extremes' 16 — four times the data and, for Llama, 2.56 epochs
+against 0.80. Re-running Llama's middle band at `GROUP_SIZE=32` matches it to the
+extremes on every axis (verified: `training/epoch` stays 0 for all 20 steps, so
+no problem is seen twice). All four runs below are now G=32, 16 problems/step,
+320 problem instances, 20 steps:
+
+| Llama band | MATH-500 pass@1 | AIME pass@4 |
+|---|---|---|
+| hard, 5–15% | 44.0 **+5.0** [2.1, 8.1] | 17.0 **+4.9** [0.3, 8.9] |
+| medium, 40–60% (G=8, confounded) | 44.4 **+5.3** [2.5, 8.3] | 14.3 +2.2 [−2.5, 6.4] |
+| **medium, 40–60% (G=32, matched)** | 45.4 **+6.3** [3.5, 9.3] | 12.1 +0.1 [−3.8, 3.8] |
+| easy, 85–95% | 45.1 **+6.0** [3.1, 9.0] | 13.8 +1.8 [−2.2, 5.7] |
+
+Removing the confound does not rescue the middle band on AIME — it makes it
+worse, from +2.2 to +0.1, while MATH-500 improves from +5.3 to +6.3. Its AIME
+trajectory rises and comes back down (12.0 → 14.9 → 16.0 → 13.7 → 12.1), ending
+where it started, against the hard band's strictly monotone 12.0 → 17.0.
+
+So with every setting matched and only difficulty varying: **MATH-500 gains are
+the same across bands (+5.0 / +6.3 / +6.0) and the AIME gain belongs to the hard
+band alone.** The extra data the middle band had been getting was, if anything,
+inflating its apparent transfer.
 
 ### The rollout length cap changes what the reward measures
 
