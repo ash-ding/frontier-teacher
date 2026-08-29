@@ -27,6 +27,23 @@ TASKS="math500 aime hmmt"
 mkdir -p logs outputs
 [ -d "$CKROOT" ] || { echo "no checkpoints at $CKROOT"; exit 1; }
 
+# Never launch onto a card that is still held. A reaped job can leave an
+# EngineCore holding tens of GB, and the next process on that GPU dies at engine
+# init with CUDA OOM - which is how shard 0 of one job was lost while its seven
+# siblings finished normally. Killing the orphan is not enough; the driver
+# releases asynchronously, so wait for the memory to actually drop.
+wait_gpus_free () {
+  local tries=0 busy
+  while [ "$tries" -lt 60 ]; do
+    busy=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits |
+             awk '$1 > 2000' | wc -l)
+    [ "$busy" -eq 0 ] && return 0
+    [ "$tries" -eq 0 ] && echo "  waiting for $busy GPU(s) to drain"
+    sleep 10; tries=$((tries + 1))
+  done
+  echo "  WARNING: GPUs still busy after 10 min, launching anyway"
+}
+
 for d in "$CKROOT"/global_step_*/actor/huggingface; do
   [ -f "$d/config.json" ] || continue
   step=$(echo "$d" | sed -E 's|.*/global_step_([0-9]+)/.*|\1|')
@@ -35,27 +52,47 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
     summary="outputs/${tag}__${task}.summary.json"
     [ -f "$summary" ] && { echo "  skip (done) step $step / $task"; continue; }
     echo "  === step $step / $task across $NGPU GPUs  $(date -u +%H:%M:%S)Z ==="
-    pids=()
-    for g in $(seq 0 $((NGPU-1))); do
-      CUDA_VISIBLE_DEVICES=$g VLLM_LOGGING_LEVEL=WARNING \
-        python src/evaluate.py --config "configs/${CFG}.yaml" --task "$task" \
-          --model "$d" --name "$tag" --shard "$g" --num-shards "$NGPU" \
-          > "logs/eval__${tag}__${task}__s${g}.log" 2>&1 &
-      pids+=($!)
+
+    # Two rounds. A shard that dies at engine init - which happens when a
+    # previous job left a process holding the card, and cost 2 h of waiting on
+    # lumen-3 for a job whose other 7 shards had finished in 30 min - leaves no
+    # summary, so the second round relaunches exactly the missing shards.
+    for round in 1 2; do
+      missing=""
+      for g in $(seq 0 $((NGPU-1))); do
+        [ -f "outputs/${tag}__${task}__s${g}of${NGPU}.summary.json" ] || missing="$missing $g"
+      done
+      [ -z "$missing" ] && break
+      [ "$round" -eq 2 ] && echo "  retry shards:$missing"
+      wait_gpus_free
+      pids=()
+      for g in $missing; do
+        CUDA_VISIBLE_DEVICES=$g VLLM_LOGGING_LEVEL=WARNING \
+          python src/evaluate.py --config "configs/${CFG}.yaml" --task "$task" \
+            --model "$d" --name "$tag" --shard "$g" --num-shards "$NGPU" \
+            > "logs/eval__${tag}__${task}__s${g}.log" 2>&1 &
+        pids+=($!)
+      done
+      # vLLM regularly finishes its work and then fails to exit, so reap on the
+      # shard's summary appearing rather than on the process ending. A shard is
+      # ~30-50 min; an hour without one means it is stuck, not slow.
+      want=$(echo $missing | wc -w); got=0; waited=0
+      while [ "$got" -lt "$want" ] && [ "$waited" -lt 3600 ]; do
+        sleep 10; waited=$((waited+10))
+        got=0
+        for g in $missing; do
+          [ -f "outputs/${tag}__${task}__s${g}of${NGPU}.summary.json" ] && got=$((got+1))
+        done
+      done
+      sleep 15
+      for p in "${pids[@]}"; do kill -9 "$p" 2>/dev/null; done
+      for pid in $(ps -eo pid,cmd | grep '[V]LLM::EngineCore' | awk '{print $1}'); do
+        kill -9 "$pid" 2>/dev/null
+      done
+      sleep 8
     done
-    # vLLM regularly finishes its work and then fails to exit, so reap on the
-    # shard's summary appearing rather than on the process ending.
-    done_n=0; waited=0
-    while [ "$done_n" -lt "$NGPU" ] && [ "$waited" -lt 7200 ]; do
-      sleep 10; waited=$((waited+10))
-      done_n=$(ls outputs/${tag}__${task}__s*of${NGPU}.summary.json 2>/dev/null | wc -l)
-    done
-    sleep 15
-    for p in "${pids[@]}"; do kill -9 "$p" 2>/dev/null; done
-    for pid in $(ps -eo pid,cmd | grep '[V]LLM::EngineCore' | awk '{print $1}'); do
-      kill -9 "$pid" 2>/dev/null
-    done
-    sleep 8
+
+    done_n=$(ls outputs/${tag}__${task}__s*of${NGPU}.summary.json 2>/dev/null | wc -l)
     if [ "$done_n" -eq "$NGPU" ]; then
       python src/merge_shards.py --config "configs/${CFG}.yaml" --task "$task" \
         --name "$tag" > "logs/merge__${tag}__${task}.log" 2>&1 \
