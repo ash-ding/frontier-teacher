@@ -46,6 +46,10 @@ def main():
         m = CKPT.match(p.name)
         if m:
             task = m["task"]
+            # A sharded evaluation writes {tag}__{task}__sNofM.summary.json until
+            # it merges, and \w+ swallows the shard suffix into the task name.
+            # Those files hold one eighth of the problems; plotting one as a
+            # panel value would be wrong, not merely noisy.
             if task not in HEADLINE:
                 continue
             metric = HEADLINE[task]
