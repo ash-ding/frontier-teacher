@@ -30,6 +30,7 @@ if not shards:
     raise SystemExit(f"no shard records for {base}")
 
 records, gen_s, gen_tok_tot, samp = [], 0.0, 0, 0
+models = set()
 for sp in shards:
     rs = [json.loads(l) for l in sp.open()]
     records += rs
@@ -38,12 +39,20 @@ for sp in shards:
     n_s = sum(r["n"] for r in rs)
     gen_tok_tot += sm["mean_gen_tokens"] * n_s
     samp += n_s
+    models.add(sm.get("model"))
+
+# summarize() takes the model from the config, which is the BASE model - so a
+# merged checkpoint evaluation would claim to be the released weights. Carry the
+# model the shards actually loaded, and refuse to merge shards that disagree,
+# since that would silently average two different models into one score.
+assert len(models) == 1, f"shards evaluated different models: {sorted(models)}"
 
 records.sort(key=lambda r: r["id"])
 summary = summarize(records, cfg, a.task, task_cfg, extra={
     "mean_gen_tokens": gen_tok_tot / samp,
     "gen_seconds": gen_s,
     "merged_from_shards": len(shards),
+    "model": models.pop(),
 })
 
 (outdir / f"{base}.summary.json").write_text(json.dumps(summary, indent=2))
