@@ -1,0 +1,205 @@
+<title>Which Problems Teach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Literata:opsz,wght@7..72,400;7..72,500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f4f5f7; --surface:#fcfcfd; --surface-2:#eef0f4;
+  --ink:#12131a; --ink-2:#4e5261; --ink-3:#7b8095;
+  --rule:#dcdfe7; --rule-2:#c3c8d4;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --accent:#2a78d6;
+  --shadow:0 1px 2px rgba(18,19,26,.05),0 8px 24px -12px rgba(18,19,26,.18);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#101013; --surface:#1a1a19; --surface-2:#232326;
+    --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
+    --rule:#2e2e33; --rule-2:#3d3d44;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --accent:#3987e5;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101013; --surface:#1a1a19; --surface-2:#232326;
+  --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
+  --rule:#2e2e33; --rule-2:#3d3d44;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --accent:#3987e5;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:Literata,Georgia,"Times New Roman",serif;
+  font-size:16px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:56px 28px 96px}
+h1,h2,h3,.lab,th,.colhead,.rowlab,.legend,.tick,.endlab{
+  font-family:Archivo,"Helvetica Neue",Arial,sans-serif;
+}
+h1{font-size:clamp(30px,4.4vw,46px);font-weight:700;letter-spacing:-.022em;
+   line-height:1.08;margin:0 0 14px;text-wrap:balance}
+.sub{font-size:19px;color:var(--ink-2);max-width:62ch;margin:0 0 34px}
+.lab{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+     color:var(--ink-3)}
+h2{font-size:23px;font-weight:600;letter-spacing:-.012em;margin:56px 0 6px}
+h3{font-size:16px;font-weight:600;margin:28px 0 4px;letter-spacing:-.005em}
+p{margin:0 0 14px;max-width:68ch}
+a{color:var(--accent)}
+.mono,td,.num{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  font-variant-numeric:tabular-nums}
+
+/* setup strip */
+.setup{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:9px;
+  overflow:hidden;margin:0 0 12px}
+.setup div{background:var(--surface);padding:13px 15px}
+.setup b{display:block;font-family:"IBM Plex Mono",monospace;font-size:19px;
+  font-weight:500;letter-spacing:-.02em;margin-bottom:1px}
+.setup span{font-family:Archivo,sans-serif;font-size:11px;font-weight:600;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:20px;align-items:center;
+  font-size:13px;color:var(--ink-2);margin:26px 0 14px}
+.key{display:inline-flex;align-items:center;gap:7px}
+.swatch{width:22px;height:3px;border-radius:2px;display:inline-block}
+.k1 .swatch{background:var(--s1)} .k2 .swatch{background:var(--s2)}
+.k3 .swatch{background:var(--s3)}
+.dashkey .swatch{background:linear-gradient(90deg,var(--ink-3) 60%,transparent 60%);
+  background-size:7px 3px}
+
+/* grid */
+.gridwrap{overflow-x:auto;padding-bottom:4px}
+.grid{display:grid;grid-template-columns:118px repeat(3,minmax(226px,1fr));
+  gap:10px;align-items:stretch;min-width:820px}
+.colheads{display:grid;grid-template-columns:118px repeat(3,minmax(226px,1fr));
+  gap:10px;min-width:820px;margin-bottom:6px}
+.colhead{grid-column:span 1;padding:0 4px 6px;border-bottom:1px solid var(--rule-2)}
+.colhead:first-child{border:0}
+.colhead span{display:block;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.colhead em{font-style:normal;font-size:11px;font-weight:500;color:var(--ink-3);
+  letter-spacing:.06em;text-transform:uppercase}
+.rowlab{display:flex;flex-direction:column;justify-content:center;gap:2px;
+  padding-right:8px;border-right:1px solid var(--rule)}
+.tname{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.tmetric{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-2)}
+.tkind{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3)}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:8px;
+  padding:4px;box-shadow:var(--shadow)}
+.panel.empty{display:flex;align-items:center;justify-content:center;
+  color:var(--ink-3);font-size:13px;min-height:150px}
+.panel svg{display:block;width:100%;height:auto}
+.grid line.grid{stroke:var(--rule);stroke-width:1}
+.baseline{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:2 3;opacity:.75}
+.tick{font-size:9px;fill:var(--ink-3);font-weight:500}
+.line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.dot{stroke:var(--surface);stroke-width:1.6}
+.endlab{font-size:9.5px;font-weight:700}
+.stop{fill:none;stroke:var(--ink-3);stroke-width:1.4;stroke-dasharray:2 2}
+.s1{stroke:var(--s1)} circle.s1{fill:var(--s1)} text.s1{fill:var(--s1);stroke:none}
+.s2{stroke:var(--s2)} circle.s2{fill:var(--s2)} text.s2{fill:var(--s2);stroke:none}
+.s3{stroke:var(--s3)} circle.s3{fill:var(--s3)} text.s3{fill:var(--s3);stroke:none}
+
+/* table */
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:9px;
+  background:var(--surface);margin-top:14px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:760px}
+th{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);text-align:right;padding:11px 10px;border-bottom:1px solid var(--rule-2);
+  white-space:nowrap}
+th:nth-child(-n+3){text-align:left}
+td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--rule);
+  white-space:nowrap;font-size:12.5px}
+td:nth-child(-n+3){text-align:left;font-family:Literata,serif}
+tr:last-child td{border-bottom:0}
+td.delta{font-weight:500;color:var(--ink)}
+td.na{color:var(--ink-3)}
+tbody tr:hover td{background:var(--surface-2)}
+
+/* callouts */
+.note{border-left:3px solid var(--accent);background:var(--surface);
+  padding:14px 18px;border-radius:0 8px 8px 0;margin:20px 0;font-size:15px;
+  box-shadow:var(--shadow)}
+.note.warn{border-left-color:var(--s2)}
+.note p:last-child{margin-bottom:0}
+.foot{margin-top:64px;padding-top:20px;border-top:1px solid var(--rule);
+  font-size:13px;color:var(--ink-3)}
+ul{max-width:68ch;padding-left:20px} li{margin-bottom:7px}
+strong{font-weight:600}
+</style>
+
+<div class="wrap">
+<p class="lab">Frontier Teacher · GRPO pilot</p>
+<h1>Which problems teach?</h1>
+<p class="sub">Nine GRPO runs — three models, each trained on three bands of its own
+measured problem difficulty — evaluated on the same three benchmarks at a shared
+budget of 10,240 student rollouts.</p>
+
+<div class="setup">
+  <div><b>9</b><span>runs</span></div>
+  <div><b>10,240</b><span>rollouts each</span></div>
+  <div><b>512</b><span>rollouts / step</span></div>
+  <div><b>20</b><span>optimisation steps</span></div>
+  <div><b>5</b><span>points per curve</span></div>
+  <div><b>743</b><span>problems evaluated</span></div>
+</div>
+
+<div class="legend">
+  <span class="key k1"><i class="swatch"></i> hard band — low pass@1</span>
+  <span class="key k2"><i class="swatch"></i> medium band — ≈50%</span>
+  <span class="key k3"><i class="swatch"></i> easy band — high pass@1</span>
+  <span class="key dashkey"><i class="swatch"></i> matched-group-size control</span>
+  <span style="color:var(--ink-3)">dotted rule = untrained baseline · label = change from it</span>
+</div>
+
+<div class="gridwrap">
+  <div class="colheads"><div class="colhead"></div><!--COLHEADS--></div>
+  <div class="grid"><!--GRID--></div>
+</div>
+<p style="font-size:13px;color:var(--ink-3);margin-top:10px">
+  x-axis: student rollouts, 0 to 10,240. Each panel scales to its own data — the
+  three models sit at very different absolute levels, and a shared axis would
+  flatten every curve into a line. Compare <em>within</em> a panel; read across
+  panels using the labelled change from baseline.</p>
+
+<h2>What the panels show</h2>
+<!--FINDINGS-->
+
+<h2>Every number</h2>
+<p style="font-size:14px;color:var(--ink-2)">Score at each rollout count, and the
+change from the untrained model. Columns are rollouts.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Model</th><th>Band</th><th>Benchmark</th>
+<th>0</th><th>2,560</th><th>5,120</th><th>7,680</th><th>10,240</th><th>Δ</th></tr></thead>
+<tbody><!--TABLE--></tbody></table></div>
+
+<h2>Method</h2>
+<ul>
+<li><strong>Training.</strong> GRPO in verl 0.9.0, vLLM rollouts, reward from the
+same <code>grading.py</code> the evaluation uses, so a gain cannot come from the
+grader. Every run starts from the released weights.</li>
+<li><strong>Group size follows the band.</strong> A GRPO group whose rollouts are
+all wrong contributes no gradient — 48.2% of groups at pass@1 8.7% with G=8, so
+the extreme bands use G=32 and the middle band G=8. Batch sizes are set against G
+to hold 512 rollouts per step, which is what puts the curves on one axis.</li>
+<li><strong>Evaluation.</strong> MATH-500 at 4 samples, AIME 2020–2024 (150
+problems) at 8, HMMT Feb 2025 / Nov 2025 / Feb 2026 (93 problems) at 16. pass@k
+uses the unbiased estimator. AIME and HMMT never appear in training — they are
+pure transfer.</li>
+<li><strong>Significance</strong> quoted in the text is a two-level bootstrap over
+both problems and generations. Re-running one identical evaluation of one
+identical model returned AIME pass@4 15.3% and 12.0%, so resampling problems
+alone understates the interval by about a third.</li>
+</ul>
+
+<h2>What this is not</h2>
+<!--CAVEATS-->
+
+<p class="foot">Frontier Teacher — testing whether frontier models can serve as
+teachers to better train smaller models on mathematics. This page is the
+no-teacher control: plain GRPO, which any teacher-side method has to beat.</p>
+</div>

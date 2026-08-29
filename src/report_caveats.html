@@ -1,0 +1,22 @@
+<div class="note warn"><p><strong>A pilot, not a converged comparison.</strong>
+20 optimisation steps is where standard GRPO recipes use hundreds. These curves
+answer whether movement happens and whether it differs by band. Several are still
+rising at the last point.</p></div>
+<ul>
+<li><strong>The middle band is confounded.</strong> Holding rollouts per step
+fixed means group size also fixes how many distinct problems a step covers
+(512/G): the middle bands saw 64 problems per step against the extremes' 16, and
+four times the data over a run. A matched-group-size re-run is the dashed line;
+where it is absent, no middle-band comparison should be read as difficulty alone.</li>
+<li><strong>The thinking rows carry a confound that cannot be removed.</strong>
+Qwen3-4B in thinking mode has only 851 problems in the whole 12k pool with
+0 &lt; pass@1 &lt; 1, so its hard band is 100 problems seen 3.2 times while its
+easy band is 400 seen 0.8 times. Its MATH-500 row is also at ceiling — 95.9%
+before training.</li>
+<li><strong>One cell is incomplete.</strong> The thinking hard band ran out of GPU
+memory at step 19 of 20 and has no 10,240-rollout endpoint; its last point is
+marked with a ring and is not comparable with the other endpoints.</li>
+<li><strong>Llama's training pool excludes contaminated problems.</strong> It
+scores 61.0% on problems from the original MATH train split against 40.3% on
+test-derived ones, so its bands draw only from the 4,498 clean problems.</li>
+</ul>

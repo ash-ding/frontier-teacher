@@ -1,0 +1,26 @@
+<h3>The in-domain metric saturates where transfer begins</h3>
+<p>Split each non-thinking run in half. Over the first 5,120 rollouts MATH-500
+gains <strong>+2.2</strong> points and AIME gains nothing (−0.7, not significant).
+Over the second 5,120 the pattern inverts: MATH-500 adds <strong>+0.1</strong>
+and AIME adds <strong>+5.0</strong>. The same reversal appears in all three
+non-thinking bands, at p = 0.008 / 0.002 / 0.009 — three independent replications
+of the same effect.</p>
+<p>Stopping at 5,120 rollouts because MATH-500 had flattened would have produced
+the conclusion that nothing transferred.</p>
+
+<h3>For the student, only the hard band transfers</h3>
+<p>On MATH-500 Llama's three bands are indistinguishable — +5.0, +5.3, +6.0, with
+intervals that overlap almost entirely; if anything the <em>easy</em> band is
+best. On AIME they separate. The hard band rises at every checkpoint
+(12.0 → 12.8 → 14.5 → 16.0 → 17.0, +4.9, p = 0.018) and is still rising when the
+budget runs out. The medium and easy bands give +2.2 and +1.8, neither
+distinguishable from zero.</p>
+<p>Difficulty does not change how much a model gains on the distribution it
+trained on. It changes whether the gain leaves that distribution.</p>
+
+<h3>HMMT cannot resolve anything for a 3B model</h3>
+<p>Llama's HMMT baseline is 1.8% pass@4 — 10 correct samples out of 1,488,
+spread over 4 of 93 problems. Solving two more problems doubles the metric, and
+all three bands wander between 1.5% and 4.1% with no trend. It is reported for
+completeness, not as evidence. HMMT separates the two Qwen configurations
+cleanly (20.5% against 57.0%), which is what it was added for.</p>
