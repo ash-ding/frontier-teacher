@@ -1,0 +1,26 @@
+{
+  "tag": "qwen3-4b-nothink__pass1_75-87pct__step20__math500",
+  "model": "/home/asherding/code/frontier-teacher/outputs/checkpoints/qwen3-4b-nothink__pass1_75-87pct/global_step_20/actor/huggingface",
+  "config": "qwen3-4b-nothink__pass1_75-87pct__step20",
+  "task": "math500",
+  "n_problems": 500,
+  "samples_per_problem": 4,
+  "pass@1": 0.8645,
+  "pass@1_stderr": 0.013052595162685539,
+  "truncation_rate": 0.0085,
+  "no_answer_rate": 0.005,
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "max_tokens": 8192,
+    "enable_thinking": false
+  },
+  "pass@4": 0.936,
+  "pass@4_stderr": 0.01095664621097098,
+  "mean_gen_tokens": 1064.8525,
+  "gen_seconds": 243.06644248962402,
+  "shard": 0,
+  "num_shards": 1,
+  "headline_metric": "pass@1"
+}

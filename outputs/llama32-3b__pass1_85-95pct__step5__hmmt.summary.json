@@ -1,0 +1,30 @@
+{
+  "tag": "llama32-3b__pass1_85-95pct__step5__hmmt",
+  "model": "/home/asherding/code/frontier-teacher/outputs/checkpoints/llama32-3b__pass1_85-95pct/global_step_5/actor/huggingface",
+  "config": "llama32-3b__pass1_85-95pct__step5",
+  "task": "hmmt",
+  "n_problems": 93,
+  "samples_per_problem": 16,
+  "pass@1": 0.013440860215053764,
+  "pass@1_stderr": 0.005800630544903248,
+  "truncation_rate": 0.08131720430107527,
+  "no_answer_rate": 0.10080645161290322,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "top_k": -1,
+    "max_tokens": 4096,
+    "enable_thinking": null
+  },
+  "pass@4": 0.04095474418055063,
+  "pass@4_stderr": 0.015127088590920755,
+  "pass@8": 0.06445346767927412,
+  "pass@8_stderr": 0.021519988786641273,
+  "pass@16": 0.0967741935483871,
+  "pass@16_stderr": 0.03082364793244868,
+  "mean_gen_tokens": 978.8313172043011,
+  "gen_seconds": 92.7504186630249,
+  "shard": 0,
+  "num_shards": 1,
+  "headline_metric": "pass@4"
+}

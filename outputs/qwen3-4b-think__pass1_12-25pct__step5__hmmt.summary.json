@@ -1,0 +1,28 @@
+{
+  "tag": "qwen3-4b-think__pass1_12-25pct__step5__hmmt",
+  "model": "/home/asherding/code/frontier-teacher/outputs/checkpoints/qwen3-4b-think__pass1_12-25pct/global_step_5/actor/huggingface",
+  "config": "qwen3-4b-think__pass1_12-25pct__step5",
+  "task": "hmmt",
+  "n_problems": 93,
+  "samples_per_problem": 16,
+  "pass@1": 0.4314516129032258,
+  "pass@1_stderr": 0.04360203092224514,
+  "truncation_rate": 0.15188172043010753,
+  "no_answer_rate": 0.08266129032258064,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "max_tokens": 30000,
+    "enable_thinking": true
+  },
+  "pass@4": 0.571534916696207,
+  "pass@4_stderr": 0.04609826111579906,
+  "pass@8": 0.6332138590203107,
+  "pass@8_stderr": 0.046522687283029655,
+  "pass@16": 0.6881720430107527,
+  "pass@16_stderr": 0.04829610685421209,
+  "mean_gen_tokens": 18280.114919354837,
+  "gen_seconds": 3028.604654788971,
+  "merged_from_shards": 8
+}

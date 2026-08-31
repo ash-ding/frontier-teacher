@@ -1,0 +1,30 @@
+{
+  "tag": "qwen3-4b-nothink__hmmt",
+  "model": "Qwen/Qwen3-4B",
+  "config": "qwen3-4b-nothink",
+  "task": "hmmt",
+  "n_problems": 93,
+  "samples_per_problem": 16,
+  "pass@1": 0.11760752688172044,
+  "pass@1_stderr": 0.026582013230527442,
+  "truncation_rate": 0.13844086021505375,
+  "no_answer_rate": 0.125,
+  "sampling": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "max_tokens": 8192,
+    "enable_thinking": false
+  },
+  "pass@4": 0.2050395840718421,
+  "pass@4_stderr": 0.03657668189045772,
+  "pass@8": 0.25496904529162595,
+  "pass@8_stderr": 0.04203937293582035,
+  "pass@16": 0.3010752688172043,
+  "pass@16_stderr": 0.04782542430592619,
+  "mean_gen_tokens": 3230.551747311828,
+  "gen_seconds": 822.1455326080322,
+  "shard": 0,
+  "num_shards": 1,
+  "headline_metric": "pass@4"
+}

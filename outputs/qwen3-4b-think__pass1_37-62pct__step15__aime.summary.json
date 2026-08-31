@@ -1,0 +1,26 @@
+{
+  "tag": "qwen3-4b-think__pass1_37-62pct__step15__aime",
+  "model": "/home/asherding/code/frontier-teacher/outputs/checkpoints/qwen3-4b-think__pass1_37-62pct/global_step_15/actor/huggingface",
+  "config": "qwen3-4b-think__pass1_37-62pct__step15",
+  "task": "aime",
+  "n_problems": 150,
+  "samples_per_problem": 8,
+  "pass@1": 0.68,
+  "pass@1_stderr": 0.030640989639452106,
+  "truncation_rate": 0.135,
+  "no_answer_rate": 0.08083333333333333,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "max_tokens": 30000,
+    "enable_thinking": true
+  },
+  "pass@4": 0.8196190476190476,
+  "pass@4_stderr": 0.029256580904372016,
+  "pass@8": 0.8533333333333334,
+  "pass@8_stderr": 0.02898223889753509,
+  "mean_gen_tokens": 15769.980833333333,
+  "gen_seconds": 2041.4229719638824,
+  "merged_from_shards": 8
+}

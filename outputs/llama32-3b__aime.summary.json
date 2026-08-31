@@ -5,12 +5,10 @@
   "task": "aime",
   "n_problems": 150,
   "samples_per_problem": 8,
-  "pass@1": 0.06333333333333334,
-  "pass@1_stderr": 0.0126664900493986,
-  "truncation_rate": 0.08333333333333333,
-  "no_answer_rate": 0.11333333333333333,
-  "mean_gen_tokens": 1010.225,
-  "gen_seconds": 78.2723138332367,
+  "pass@1": 0.04833333333333332,
+  "pass@1_stderr": 0.011266714321543842,
+  "truncation_rate": 0.0875,
+  "no_answer_rate": 0.12333333333333334,
   "sampling": {
     "temperature": 0.6,
     "top_p": 0.9,
@@ -18,8 +16,13 @@
     "max_tokens": 4096,
     "enable_thinking": null
   },
-  "pass@4": 0.15266666666666667,
-  "pass@4_stderr": 0.02607612212239568,
-  "pass@8": 0.2,
-  "pass@8_stderr": 0.03276927682076162
+  "pass@4": 0.1202857142857143,
+  "pass@4_stderr": 0.023213218010207985,
+  "pass@8": 0.16666666666666666,
+  "pass@8_stderr": 0.030530971060304658,
+  "mean_gen_tokens": 1056.305,
+  "gen_seconds": 83.60715985298157,
+  "shard": 0,
+  "num_shards": 1,
+  "headline_metric": "pass@4"
 }
