@@ -58,6 +58,19 @@ def main():
 
     src = Path(a.subset)
     rows = [json.loads(l) for l in src.open()]
+
+    # A handful of MATH problems carry an empty answer - the upstream extraction
+    # failed on their multiple-choice form. They are ungradeable, so they can
+    # never be scored correct and land in the p = 0 band by construction rather
+    # than by being hard: 3 of the 11,996-problem pool, all three in a p = 0
+    # subset and none anywhere else. Training on them is harmless (they are
+    # always wrong, so the group is degenerate either way) but they would inflate
+    # any count of "problems this model cannot solve", so drop them and say so.
+    ungradeable = [r for r in rows if not str(r.get("answer", "")).strip()]
+    if ungradeable:
+        print(f"  dropping {len(ungradeable)} ungradeable row(s) with an empty answer: "
+              f"{', '.join(r['id'] for r in ungradeable[:5])}")
+        rows = [r for r in rows if str(r.get("answer", "")).strip()]
     conv = convert(rows)
 
     dst = Path(a.out) if a.out else src.with_suffix(".verl.jsonl")
