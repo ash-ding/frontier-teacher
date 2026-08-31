@@ -116,7 +116,9 @@ td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--rule);
   white-space:nowrap;font-size:12.5px}
 td:nth-child(-n+3){text-align:left;font-family:Literata,serif}
 tr:last-child td{border-bottom:0}
-td.delta{font-weight:500;color:var(--ink)}
+td.delta{color:var(--ink-2);font-size:11.5px;white-space:nowrap}
+td.delta em{font-style:normal;color:var(--ink-3);margin-left:4px;font-size:10.5px}
+td.delta.sig{color:var(--ink);font-weight:600}
 td.na{color:var(--ink-3)}
 tbody tr:hover td{background:var(--surface-2)}
 
@@ -172,10 +174,14 @@ no teacher: the control that a teacher-side method has to beat.</p>
 
 <h2>Every number</h2>
 <p style="font-size:14px;color:var(--ink-2)">Score at each rollout count, and the
-change from the untrained model. Columns are rollouts.</p>
+change from the untrained model with its 95% interval. Deltas are bootstrapped
+over problems <em>and</em> generations; bold is an interval clear of zero. The
+last column repeats the change under pass@1 — the stricter reading of the same
+runs — for the two benchmarks whose headline is pass@4.</p>
 <div class="tablewrap"><table>
 <thead><tr><th>Model</th><th>Band</th><th>Benchmark</th>
-<th>0</th><th>2,560</th><th>5,120</th><th>7,680</th><th>10,240</th><th>Δ</th></tr></thead>
+<th>0</th><th>2,560</th><th>5,120</th><th>7,680</th><th>10,240</th>
+<th>Δ headline</th><th>Δ pass@1</th></tr></thead>
 <tbody><!--TABLE--></tbody></table></div>
 
 <h2>Method</h2>

@@ -146,6 +146,14 @@ def main():
 
     doc = json.loads(Path(a.curves).read_text())
     series = doc["series"]
+    # Never print a delta without its interval. paired_stats.py resamples both
+    # problems and generations; a table showing only the point estimate would
+    # imply a precision the five-point curves do not have.
+    stats_path = Path(a.stats) if a.stats else ROOT / "outputs" / "paired_stats.json"
+    stats = {}
+    if stats_path.exists():
+        for r in json.loads(stats_path.read_text()):
+            stats[(r["config"], r["band"], r["variant"], r["task"], r["metric"])] = r
     body = Path(str(ROOT / "src" / "report_template.html")).read_text()
 
     grid = []
@@ -176,11 +184,19 @@ def main():
                 cells = "".join(
                     f'<td>{100*vals[r]:.1f}</td>' if vals.get(r) is not None else '<td class="na">—</td>'
                     for r in (0, 2560, 5120, 7680, 10240))
-                b0, b1 = vals.get(0), vals.get(10240)
-                d = f'{100*(b1-b0):+.1f}' if (b0 is not None and b1 is not None) else "—"
+                def fmt(key):
+                    r = stats.get((ckey, s["band"], s.get("variant") or "", tkey, key))
+                    if not r:
+                        return '<td class="na">—</td>'
+                    sig = ' sig' if (r["lo"] > 0 or r["hi"] < 0) else ''
+                    return (f'<td class="delta{sig}">{100*r["delta"]:+.1f}'
+                            f'<em>[{100*r["lo"]:+.1f}, {100*r["hi"]:+.1f}]</em></td>')
+                # MATH-500's headline already IS pass@1; showing it twice invites
+                # the reader to think two different things were measured.
+                p1 = '<td class="na"></td>' if metric == "pass@1" else fmt("pass@1")
                 trs.append(f'<tr><td>{cname}</td><td>{BAND_LABEL[role]}</td>'
                            f'<td>{tname} {metric}</td>{cells}'
-                           f'<td class="delta">{d}</td></tr>')
+                           f'{fmt(metric)}{p1}</tr>')
     body = body.replace("<!--TABLE-->", "\n".join(trs))
     # The setup strip was hand-typed and went stale as controls landed. Derive it.
     runs = {(x["config"], x["band"], x.get("variant") or "") for x in series}

@@ -19,7 +19,10 @@ difficulty differs, goes to <strong>+0.1</strong> — up to 16.0 and back down t
 12.1, ending where it started.</p>
 <p>For <strong>Qwen3-4B non-thinking</strong>, matched the same way, every band
 transfers at similar magnitude: AIME +4.3 / +5.5 / +4.8 across hard, medium and
-easy, with the medium band the strongest cell overall.</p>
+easy, with the medium band the strongest cell overall. Under pass@1 — the
+stricter reading, in the table's last column — all four non-thinking cells clear
+zero on <em>both</em> transfer benchmarks, which pass@4 does not show: pass@4
+rewards coverage and is the noisier statistic, so its intervals are wider.</p>
 <p>The two configurations differ in nearly everything that could explain this —
 39.1% against 83.4% on MATH-500, an AIME baseline of 12.0% near the floor against
 36.0% that is not, and a band called &ldquo;hard&rdquo; meaning 5–15% pass@1 for
@@ -31,7 +34,8 @@ both configurations.</p>
 <h3>The strongest configuration cannot be taught this way at all</h3>
 <p>Qwen3-4B in thinking mode moves on nothing. Across three bands and three
 benchmarks, every interval covers zero: MATH-500 −0.1 to +0.1, AIME −0.1 to +2.2,
-HMMT +0.4 to +1.9. The training itself ran normally. There is simply nothing for
+HMMT +0.4 to +1.9. Under pass@1 its three AIME deltas are −0.5, −1.7 and −3.0 —
+still inside the noise, but pointing down rather than up. The training itself ran normally. There is simply nothing for
 plain GRPO to hold on to — the model already scores 95.9% on MATH-500, and
 <strong>92.9% of the 12k training pool produces no gradient at all</strong>,
 because every rollout in a group is correct or every one is wrong. Its three

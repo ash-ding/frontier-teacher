@@ -9,8 +9,6 @@
   "pass@1_stderr": 0.026402141575849497,
   "truncation_rate": 0.15333333333333332,
   "no_answer_rate": 0.12416666666666666,
-  "mean_gen_tokens": 3557.366666666667,
-  "gen_seconds": 775.5784530639648,
   "sampling": {
     "temperature": 0.7,
     "top_p": 0.8,
@@ -21,5 +19,10 @@
   "pass@4": 0.3602857142857143,
   "pass@4_stderr": 0.035884190293194854,
   "pass@8": 0.4266666666666667,
-  "pass@8_stderr": 0.04051863621453781
+  "pass@8_stderr": 0.04051863621453781,
+  "mean_gen_tokens": 3557.366666666667,
+  "gen_seconds": 767.0152487754822,
+  "shard": 0,
+  "num_shards": 1,
+  "headline_metric": "pass@4"
 }
