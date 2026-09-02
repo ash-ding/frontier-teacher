@@ -42,7 +42,6 @@ BAND_LABEL = {"p0": "p = 0 (never solved when profiled)",
               "hard": "hard (low pass@1)", "medium": "medium (≈50%)",
               "easy": "easy (high pass@1)",
               "p1": "p = 1 (always solved when profiled)"}
-DOTTED = {"p0", "p1"}
 W, H = 300, 190
 PAD_L, PAD_R, PAD_T, PAD_B = 46, 16, 14, 30
 
@@ -59,7 +58,15 @@ def slot_of(role):
 
 
 def panel(series, task, cfg):
-    """One SVG panel: every band of one configuration on one benchmark."""
+    """One SVG panel: every band of one configuration on one benchmark.
+
+    Every band is a solid line. p=0 and p=1 used to be dotted, marking them as
+    degenerate ends rather than points on the difficulty axis -- and the runs
+    disproved that: the p=0 bands train (reward 1.4% -> 6.3% on Llama, 4.7% ->
+    9.6% on non-thinking, about half their groups carrying gradient), and p=1
+    gains +3.7 on MATH-500. Five bands, one axis, hardest to easiest. A stroke
+    style that contradicts the result is a claim, not a decoration.
+    """
     # The matched-group-size controls are in the table, not here. Drawn as a
     # dashed twin of the band they re-run, they doubled the number of lines in
     # every middle panel to carry one fact - that group size moved nothing
@@ -107,15 +114,13 @@ def panel(series, task, cfg):
     for s in rows:
         role = role_of(s["band"])
         slot = slot_of(role)
-        dash = (' stroke-dasharray="5 3"' if s.get("variant")
-                else ' stroke-dasharray="1.5 2.5"' if role in DOTTED else "")
         pts = [(p["rollouts"], p["score"] * 100) for p in s["points"]
                if p["score"] is not None]
         if len(pts) < 2:
             continue
         d = " ".join(f'{"M" if i == 0 else "L"}{X(x):.1f},{Y(y):.1f}'
                      for i, (x, y) in enumerate(pts))
-        out.append(f'<path class="line s{slot}" d="{d}"{dash}/>')
+        out.append(f'<path class="line s{slot}" d="{d}"/>')
         for x, y in pts:
             out.append(f'<circle class="dot s{slot}" cx="{X(x):.1f}" cy="{Y(y):.1f}" r="3.2">'
                        f'<title>{BAND_LABEL[role]} · {x:,} rollouts · {y:.1f}%</title></circle>')
