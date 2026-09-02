@@ -1,0 +1,44 @@
+{
+  "source": "data/benchmark/hmmt_*_20*.jsonl",
+  "source_files": [
+    "data/benchmark/hmmt_feb_2025.jsonl",
+    "data/benchmark/hmmt_feb_2026.jsonl",
+    "data/benchmark/hmmt_nov_2025.jsonl"
+  ],
+  "source_n": 93,
+  "n": 19,
+  "seed": 1234,
+  "stratified_by": "competition",
+  "command": "python tools/make_test_set.py --source 'data/benchmark/hmmt_*_20*.jsonl' --out data/benchmark/hmmt_ref19.jsonl --n 19 --seed 1234 --stratify-by competition",
+  "distribution": {
+    "HMMT February 2025": 6,
+    "HMMT February 2026": 7,
+    "HMMT November 2025": 6
+  },
+  "source_distribution": {
+    "HMMT February 2025": 30,
+    "HMMT February 2026": 33,
+    "HMMT November 2025": 30
+  },
+  "ids": [
+    "hmmt-feb-2025-00",
+    "hmmt-feb-2025-02",
+    "hmmt-feb-2025-03",
+    "hmmt-feb-2025-14",
+    "hmmt-feb-2025-18",
+    "hmmt-feb-2025-24",
+    "hmmt-feb-2026-00",
+    "hmmt-feb-2026-02",
+    "hmmt-feb-2026-03",
+    "hmmt-feb-2026-05",
+    "hmmt-feb-2026-07",
+    "hmmt-feb-2026-11",
+    "hmmt-feb-2026-24",
+    "hmmt-nov-2025-00",
+    "hmmt-nov-2025-11",
+    "hmmt-nov-2025-19",
+    "hmmt-nov-2025-20",
+    "hmmt-nov-2025-25",
+    "hmmt-nov-2025-29"
+  ]
+}

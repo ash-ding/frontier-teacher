@@ -1,21 +1,27 @@
-"""Draw the fixed reference test set the teacher loop evaluates after every step.
+"""Draw a fixed reference test set for the teacher loop to evaluate every step.
 
-A subset of MATH-500, stratified by the benchmark's own `level` distribution so
-that 100 problems carry the same difficulty mix as the 500 they come from --
-an unstratified draw of 100 can land several levels off, and a test set whose
-difficulty differs from the benchmark's makes the curve it produces harder to
-read, not easier.
+A subset of one benchmark, stratified by a field of that benchmark so the subset
+carries the same mix as the whole -- difficulty for MATH-500 (`level`), year for
+AIME, contest for HMMT. An unstratified draw can land well off the parent
+distribution, and a test set that is not representative of its benchmark makes
+the curve it produces harder to read, not easier.
 
 The draw is deterministic (a fixed seed, and problems sorted by id before
 sampling), so re-running this reproduces the file byte for byte. It exists as a
 script rather than a one-off command because a committed data file whose
 provenance is somebody's shell history is exactly how a stale baseline starts.
 
-    python tools/make_test_set.py                    # 100 from MATH-500
-    python tools/make_test_set.py --n 200 --seed 7
+    # the three the teacher loop uses, regenerated exactly as committed:
+    python tools/make_test_set.py --source data/benchmark/math500.jsonl \
+        --out data/benchmark/math500_ref100.jsonl --n 100 --stratify-by level
+    python tools/make_test_set.py --source "data/benchmark/aime_20*.jsonl" \
+        --out data/benchmark/aime_ref30.jsonl --n 30 --stratify-by year
+    python tools/make_test_set.py --source "data/benchmark/hmmt_*_20*.jsonl" \
+        --out data/benchmark/hmmt_ref19.jsonl --n 19 --stratify-by competition
 """
 import argparse
 import collections
+import glob
 import json
 import random
 from pathlib import Path
@@ -40,18 +46,28 @@ def largest_remainder(counts: dict, total: int) -> dict:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--source", default="data/benchmark/math500.jsonl")
-    ap.add_argument("--out", default="data/benchmark/math500_ref100.jsonl")
-    ap.add_argument("--n", type=int, default=100)
+    ap.add_argument("--source", required=True,
+                    help="a jsonl path, or a glob for a benchmark split across "
+                         "files (quote it so the shell does not expand it)")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--n", type=int, required=True)
     ap.add_argument("--seed", type=int, default=1234)
-    ap.add_argument("--stratify-by", default="level")
+    ap.add_argument("--stratify-by", required=True,
+                    help="a field every row carries: level (MATH-500), "
+                         "year (AIME), competition (HMMT)")
     a = ap.parse_args()
 
-    src = ROOT / a.source
-    rows = sorted((json.loads(l) for l in src.open() if l.strip()),
+    files = sorted(glob.glob(str(ROOT / a.source)))
+    if not files:
+        raise SystemExit(f"--source {a.source} matched no files")
+    rows = sorted((json.loads(l) for f in files for l in open(f) if l.strip()),
                   key=lambda r: r["id"])
+    missing = [r["id"] for r in rows if a.stratify_by not in r]
+    if missing:
+        raise SystemExit(f"--stratify-by {a.stratify_by!r} is absent from "
+                         f"{len(missing)} row(s), e.g. {missing[0]}")
     if a.n > len(rows):
-        raise SystemExit(f"--n {a.n} exceeds the {len(rows)} problems in {src}")
+        raise SystemExit(f"--n {a.n} exceeds the {len(rows)} problems in {a.source}")
 
     by = collections.defaultdict(list)
     for r in rows:
@@ -70,10 +86,13 @@ def main():
     got = collections.Counter(str(r[a.stratify_by]) for r in picked)
     src_dist = collections.Counter(str(r[a.stratify_by]) for r in rows)
     (out.parent / f"{out.stem}.manifest.json").write_text(json.dumps({
-        "source": a.source, "n": a.n, "seed": a.seed,
+        "source": a.source,
+        "source_files": [str(Path(f).relative_to(ROOT)) for f in files],
+        "source_n": len(rows), "n": a.n, "seed": a.seed,
         "stratified_by": a.stratify_by,
-        "command": f"python tools/make_test_set.py --source {a.source} "
-                   f"--out {a.out} --n {a.n} --seed {a.seed}",
+        "command": f"python tools/make_test_set.py --source '{a.source}' "
+                   f"--out {a.out} --n {a.n} --seed {a.seed} "
+                   f"--stratify-by {a.stratify_by}",
         "distribution": {k: got[k] for k in sorted(got)},
         "source_distribution": {k: src_dist[k] for k in sorted(src_dist)},
         "ids": [r["id"] for r in picked],

@@ -131,27 +131,40 @@ def _trajectory_summary(run_dir, step):
         t = r.get("train")
         if t:
             lines.append(f"      train: n={t.get('n_problems')} metrics={t.get('metrics')}")
-        rt = r.get("reference_test")
+        rt = r.get("reference_test") or {}
         if rt:
-            lines.append(
-                f"      reference test AFTER this train: n={rt.get('n_problems')} "
-                f"pass@1={rt.get('pass_at_1')} pass@k={rt.get('pass_at_k')} "
-                f"trunc={rt.get('truncation_rate')} no_answer={rt.get('no_answer_rate')}")
+            lines.append("      reference tests AFTER this train:")
+            lines += _reference_test_lines(rt, indent=" " * 10)
     return "\n".join(lines) if lines else "  (no prior steps -- this is step 0)"
 
 
-def _reference_test_line(run_dir):
-    """The base model's score on the reference test set, if it was measured."""
-    sp = Path(run_dir) / "test_base" / "summary.json"
-    if not sp.exists():
-        return None
-    try:
-        s = json.loads(sp.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-    k = s.get("samples_per_problem")
-    return (f"  base model (before any training): n={s.get('n_problems')} "
-            f"pass@1={s.get('pass@1')} pass@{k}={s.get(f'pass@{k}')}")
+def _reference_test_lines(results, indent="  "):
+    """One line per reference test set, in the config's order."""
+    out = []
+    for name, r in results.items():
+        if not isinstance(r, dict) or r.get("n_problems") is None:
+            out.append(f"{indent}{name}: {r.get('status', 'no result')}"
+                       if isinstance(r, dict) else f"{indent}{name}: no result")
+            continue
+        out.append(f"{indent}{name}: n={r['n_problems']} "
+                   f"pass@1={r.get('pass_at_1')} pass@k={r.get('pass_at_k')} "
+                   f"trunc={r.get('truncation_rate')} "
+                   f"no_answer={r.get('no_answer_rate')}")
+    return out
+
+
+def _base_reference_tests(run_dir, config):
+    """The base model's reference-test scores, read back from test_base/."""
+    out = {}
+    for spec in config.get("reference_tests", []):
+        sp = Path(run_dir) / "test_base" / spec["name"] / "summary.json"
+        if not sp.exists():
+            continue
+        try:
+            out[spec["name"]] = eval_stats_from_summary(sp)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return out
 
 
 def _current_step_evals_summary(evals):
@@ -206,7 +219,10 @@ def render_context(run_dir, step, config, latest_ckpt, repo_root, *,
         _current_step_evals_summary(current_step_evals),
         "",
         "Every closed step before this one:",
-        *([_reference_test_line(run_dir)] if _reference_test_line(run_dir) else []),
+        *(["  base model, before any training:",
+           *_reference_test_lines(_base_reference_tests(run_dir, config),
+                                  indent=" " * 6)]
+          if _base_reference_tests(run_dir, config) else []),
         _trajectory_summary(run_dir, step),
         "",
         "Directories you can open:",
@@ -281,20 +297,29 @@ def _parse_verl_metrics(log_path):
 
 
 
-def run_test_evaluation(out_dir, model_path, config, repo_root, timeout_s):
-    """Evaluate a checkpoint on the run's FIXED reference test set.
+def run_test_evaluation(out_dir, model_path, config, repo_root, timeout_s, spec):
+    """Evaluate a checkpoint on ONE of the run's fixed reference test sets.
 
     Unlike run_evaluation, the problems are not the teacher's -- they are the
     same set on every step of every run, so the numbers form a curve that can be
-    read across steps and across runs. Everything else (sampling, verifier,
-    sample count) is the settings the config pins, so this differs from the
-    teacher's own evaluations only in which problems it uses.
+    read across steps and across runs.
+
+    `spec` is one entry of the config's `reference_tests`: which benchmark, how
+    many samples, which verifier, which pass@k leads. Those differ per benchmark
+    and are the project's existing conventions -- AIME's answers are integers by
+    the competition's rules and are graded exactly, MATH-500 and HMMT need
+    symbolic equivalence; MATH-500 headlines pass@1, the two competition sets
+    pass@4 off more samples, because at their pass rates pass@1 over a small set
+    resolves almost nothing.
 
     Lands summary.json / records.jsonl / generations.jsonl in `out_dir`.
     """
     return _evaluate(out_dir, model_path, config, repo_root, timeout_s,
-                     data=Path(repo_root) / config["test_data"],
-                     label="reference_test", log_name="test.log")
+                     data=Path(repo_root) / spec["data"],
+                     label=f"reference_test_{spec['name']}", log_name="test.log",
+                     overrides={k: spec[k] for k in
+                                ("samples", "verifier", "headline_metric")
+                                if k in spec})
 
 
 def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
@@ -311,22 +336,27 @@ def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
 
 
 def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
-              data, label, log_name):
-    """Shared body of the two evaluations: same settings, different problems.
+              data, label, log_name, overrides=None):
+    """Shared body of every evaluation the loop runs.
+
+    Decoding is `eval_base` and is the same everywhere -- a score is only a curve
+    if the way it was produced does not move. `teacher_eval` supplies the rest;
+    `overrides` lets one reference test carry its benchmark's own sample count,
+    verifier and headline metric.
 
     Pure command line: the data is written moments earlier or lives outside
     configs/, so there is no config to point at and nothing to register.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    tmpl = dict(config.get("teacher_eval", {}))
+    tmpl = {**dict(config.get("teacher_eval", {})), **(overrides or {})}
     base = dict(config.get("eval_base", {}))
     argv = [
         "python", str(EVAL_DIR / "evaluate.py"),
         "--model", str(model_path),
         "--data", str(data),
         "--label", label,
-        "--samples", str(tmpl.get("n", 4)),
+        "--samples", str(tmpl.get("samples", tmpl.get("n", 4))),
         "--verifier", tmpl.get("verifier", "symbolic"),
         "--max-tokens", str(tmpl.get("max_tokens", 4096)),
         "--max-model-len", str(tmpl.get("max_model_len", 8192)),
@@ -338,6 +368,8 @@ def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
         "--gpu-memory-utilization", str(base.get("gpu_memory_utilization", 0.90)),
         "--limit", "0",
         "--output-path", str(out_dir),
+        *(["--headline-metric", str(tmpl["headline_metric"])]
+          if tmpl.get("headline_metric") else []),
     ]
     rc, timed_out, wall = _stream(argv, out_dir / log_name, cwd=str(repo_root),
                                   timeout_s=timeout_s)

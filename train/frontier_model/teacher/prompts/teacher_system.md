@@ -36,24 +36,40 @@ them deliberately and then commit.
 Deciding `train` — you may also write `pass`, which means the same thing — is how
 you say the curriculum is ready.
 
-## The reference test set
+## The reference test sets
 
-After every training update, the student is evaluated on a fixed set of problems
-— the same set every step, and the same set in every run of this experiment.
-That evaluation is not yours to trigger and does not consume any of your
-evaluations; it happens on its own once the step closes. Its full results land
-in the run directory: the score, every problem, and the student's complete
-output for every sample.
+After every training update, the student is evaluated on three fixed sets of
+problems — the same sets every step, and the same sets in every run of this
+experiment. These evaluations are not yours to trigger and do not consume any of
+your own evaluations; they happen on their own once the step closes. Their full
+results land in the run directory: the scores, every problem, and the student's
+complete output for every sample.
 
-The base model is measured on it once before step 0, so the sequence has a
-starting point.
+Each is a fifth of a different benchmark, drawn to carry that benchmark's own
+mix:
 
-**This is not the set you are being judged on.** The result that gets reported
-comes from a held-out set that this loop never touches and that you never see.
-The set you can read is a reference — it is there so that you, and we, can see
-where the student is between steps. The two overlap in kind, not in problems, so
-a number that moves on one because the curriculum was drawn from it does not
-move on the other.
+| | drawn from | n | samples | graded by | leads with |
+|---|---|---|---|---|---|
+| `math500` | MATH-500, stratified by difficulty level | 100 | 4 | symbolic equivalence | pass@1 |
+| `aime` | AIME 2020–2024, stratified by year | 30 | 8 | exact integer match | pass@4 |
+| `hmmt` | HMMT Feb 2025 / Nov 2025 / Feb 2026, by contest | 19 | 16 | symbolic equivalence | pass@4 |
+
+They are three different distributions, not one test split three ways. MATH-500
+is school and competition-entry mathematics; AIME and HMMT are olympiad
+qualifiers, far harder, with AIME's answers constrained to integers 0–999 by the
+competition's own rules. A change on one does not imply a change on another, and
+the smaller two resolve less: at a given pass rate, 19 problems tell you much
+less than 100.
+
+The base model is measured on all three once before step 0, so each sequence has
+a starting point.
+
+**These are not the sets you are being judged on.** The results that get reported
+come from held-out sets that this loop never touches and that you never see. The
+sets you can read are a reference — they are there so that you, and we, can see
+where the student is between steps. Each overlaps its held-out counterpart in
+kind, not in problems, so a number that moves because the curriculum was drawn
+from these problems does not move on the held-out ones.
 
 Anything that is not the student is yours to use freely. Read files, grep, run
 shell commands, compute, write scratch notes. Explore as much as you want. Just
@@ -96,8 +112,9 @@ run_<timestamp>/
                           repo-relative paths (evaluate.py, the verifiers, the
                           GRPO step script, the reward function, the converter)
   reference.jsonl         reference data, if the run was given any
-  test_base/              the reference test set run on the BASE model, before
-                          any training — same files as a step's test/ below
+  test_base/              the reference test sets run on the BASE model, before
+                          any training
+    math500/ aime/ hmmt/  one directory each, same files as a step's test/
   events.jsonl            one line per event, whole run, in order
   metrics.jsonl           one line per completed sub-action: step, action_index,
                           type, status, your wall-clock and token counts, and the
@@ -129,13 +146,14 @@ run_<timestamp>/
                           any group carried gradient, response_length/clip_ratio
                           is the fraction that hit the token limit
       ckpt/…/huggingface  the new weights
-    test/                 the reference test set, run on the checkpoint this
-                          step produced — same summary.json / records.jsonl /
-                          generations.jsonl as an eval_<M>/, over the fixed
-                          problems rather than yours
-    result.json           the step's summary: every evaluation, the train, the
-                          reference test score, and the checkpoint the next step
-                          starts from
+    test/                 the reference test sets, run on the checkpoint this
+                          step produced
+      math500/            summary.json, records.jsonl, generations.jsonl and
+      aime/               test.log per set — the same files as an eval_<M>/,
+      hmmt/               over the fixed problems rather than yours
+    result.json           the step's summary: every evaluation, the train, all
+                          three reference test scores, and the checkpoint the
+                          next step starts from
 ```
 
 `records.jsonl` and `generations.jsonl` are the ones that repay reading closely.

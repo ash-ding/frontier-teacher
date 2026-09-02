@@ -56,18 +56,41 @@ ppo_mini_batch_size: 8        # -> 2 gradient updates over the batch
 train_step_timeout_s: 3600
 eval_step_timeout_s: 3600
 
-# --- the reference test set ----------------------------------------------------
-# Evaluated once on the base model and once after every training update, always
-# on the same problems, so the scores form a curve. 100 problems drawn from
-# MATH-500 stratified by its level distribution (tools/make_test_set.py).
+# --- the reference test sets ---------------------------------------------------
+# One fifth of each of the project's three benchmarks, drawn by
+# tools/make_test_set.py and stratified so each subset carries its benchmark's
+# own mix (MATH-500 by level, AIME by year, HMMT by contest). All three are
+# evaluated once on the base model and once after every training update, always
+# on the same problems, so the scores form three curves.
 #
-# This is NOT the deliverable. The result we report comes from a held-out set
-# this loop never touches; this one exists so the teacher, and we, can see where
-# the student is. Its results live in the run directory, which the teacher
-# reads - so it can see these problems, and the fact that a curriculum drawn
-# from them would move this number and not the held-out one is something the
-# system prompt states plainly.
-test_data: data/benchmark/math500_ref100.jsonl
+# samples/verifier/headline_metric are per benchmark and follow configs/eval/:
+# AIME's answers are integers by the competition's rules and are compared
+# exactly; the other two need symbolic equivalence. MATH-500 headlines pass@1;
+# the two competition sets headline pass@4 off more samples, because at a 3B
+# model's pass rates on them pass@1 over a small set resolves almost nothing.
+#
+# These are NOT the deliverable. The result we report comes from held-out sets
+# this loop never touches; these exist so the teacher, and we, can see where the
+# student is. Their results live in the run directory, which the teacher reads -
+# so it can see these problems, and the fact that a curriculum drawn from them
+# would move these numbers and not the held-out ones is something the system
+# prompt states plainly.
+reference_tests:
+  - name: math500          # 100 of 500
+    data: data/benchmark/math500_ref100.jsonl
+    samples: 4
+    verifier: symbolic
+    headline_metric: "pass@1"
+  - name: aime             # 30 of 150, AIME 2020-2024
+    data: data/benchmark/aime_ref30.jsonl
+    samples: 8
+    verifier: exact_integer
+    headline_metric: "pass@4"
+  - name: hmmt             # 19 of 93, HMMT Feb 2025 / Nov 2025 / Feb 2026
+    data: data/benchmark/hmmt_ref19.jsonl
+    samples: 16
+    verifier: symbolic
+    headline_metric: "pass@4"
 
 # --- what the teacher may read -------------------------------------------------
 # One data file, copied into the run directory rather than mounted, so what the

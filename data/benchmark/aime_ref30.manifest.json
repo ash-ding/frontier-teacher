@@ -1,0 +1,61 @@
+{
+  "source": "data/benchmark/aime_20*.jsonl",
+  "source_files": [
+    "data/benchmark/aime_2020.jsonl",
+    "data/benchmark/aime_2021.jsonl",
+    "data/benchmark/aime_2022.jsonl",
+    "data/benchmark/aime_2023.jsonl",
+    "data/benchmark/aime_2024.jsonl"
+  ],
+  "source_n": 150,
+  "n": 30,
+  "seed": 1234,
+  "stratified_by": "year",
+  "command": "python tools/make_test_set.py --source 'data/benchmark/aime_20*.jsonl' --out data/benchmark/aime_ref30.jsonl --n 30 --seed 1234 --stratify-by year",
+  "distribution": {
+    "2020": 6,
+    "2021": 6,
+    "2022": 6,
+    "2023": 6,
+    "2024": 6
+  },
+  "source_distribution": {
+    "2020": 30,
+    "2021": 30,
+    "2022": 30,
+    "2023": 30,
+    "2024": 30
+  },
+  "ids": [
+    "aime-2020-00",
+    "aime-2020-02",
+    "aime-2020-03",
+    "aime-2020-14",
+    "aime-2020-18",
+    "aime-2020-24",
+    "aime-2021-01",
+    "aime-2021-02",
+    "aime-2021-03",
+    "aime-2021-21",
+    "aime-2021-22",
+    "aime-2021-24",
+    "aime-2022-00",
+    "aime-2022-07",
+    "aime-2022-11",
+    "aime-2022-25",
+    "aime-2022-26",
+    "aime-2022-27",
+    "aime-2023-11",
+    "aime-2023-14",
+    "aime-2023-15",
+    "aime-2023-19",
+    "aime-2023-20",
+    "aime-2023-27",
+    "aime-2024-00",
+    "aime-2024-02",
+    "aime-2024-03",
+    "aime-2024-04",
+    "aime-2024-05",
+    "aime-2024-22"
+  ]
+}
