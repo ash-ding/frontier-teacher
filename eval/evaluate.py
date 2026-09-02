@@ -56,8 +56,8 @@ def build_args():
     g.add_argument("--out", default=None, help="output directory (default: outputs/)")
     g.add_argument("--model", default=None, help="model id or checkpoint directory")
     g.add_argument("--name", default=None,
-                   help="output tag; MUST differ per checkpoint or a run overwrites "
-                        "the base model's results")
+                   help="output tag (default: the config's name, or one derived "
+                        "from --model so a checkpoint cannot overwrite a baseline)")
 
     g = ap.add_argument_group("sampling - model-specific, defaults from the config")
     g.add_argument("--samples", type=int, default=None,
@@ -82,6 +82,39 @@ def build_args():
     return ap.parse_args()
 
 
+def resolve_name(args, cfg):
+    """The output tag. Explicit --name wins; otherwise it follows the weights.
+
+    `name` forms the filename, so two runs sharing one name overwrite each
+    other. That is a real hazard rather than a theoretical one: evaluating a
+    checkpoint with the base model's config and forgetting --name silently
+    replaces that model's baseline - the rollout-0 anchor every curve and every
+    paired comparison is measured against - with a trained checkpoint's score,
+    and nothing warns you.
+
+    So a run that points --model somewhere gets a name derived from where:
+
+        .local_checkpoints/llama32-3b__pass1_05-15pct/global_step_20/actor/huggingface
+        -> llama32-3b__pass1_05-15pct__step20
+
+    A run without --model is evaluating the config's own model and keeps the
+    config's name, which is what the baselines are called.
+    """
+    if args.name:
+        return args.name
+    if not args.model:
+        return cfg["name"]
+
+    parts = Path(args.model).resolve().parts
+    step = next((p for p in reversed(parts) if p.startswith("global_step_")), None)
+    if step:
+        exp = parts[parts.index(step) - 1]
+        return f"{exp}__step{step.rsplit('_', 1)[1]}"
+    # Some other directory of weights: fall back to its own name, which at least
+    # cannot collide with a baseline.
+    return f"{cfg['name']}__{Path(args.model).name}"
+
+
 def resolve(args):
     """Config supplies defaults; the command line wins. Returns one flat dict."""
     cfg = yaml.safe_load(open(args.config))
@@ -90,30 +123,33 @@ def resolve(args):
                          f"have {sorted(cfg.get('tasks', {}))}")
     task = cfg["tasks"][args.task]
 
-    def pick(cli, *chain, required=True, default=None):
+    def pick(what, cli, *chain, default=None):
+        """First value that is set: command line, then config, then default."""
         for v in (cli, *chain):
             if v is not None:
                 return v
-        if required:
-            raise SystemExit(f"missing setting for --{chain and 'see help' or ''}")
-        return default
+        if default is not None:
+            return default
+        raise SystemExit(
+            f"{what!r} is not set. Give it on the command line (--{what.replace('_','-')}) "
+            f"or under the task/model in {args.config}.")
 
     r = {
-        "model": pick(args.model, cfg.get("model")),
-        "name": pick(args.name, cfg.get("name")),
+        "model": pick("model", args.model, cfg.get("model")),
+        "name": resolve_name(args, cfg),
         "task": args.task,
-        "samples": int(pick(args.samples, task.get("n"))),
-        "max_tokens": int(pick(args.max_tokens, task.get("max_tokens"), cfg.get("max_tokens"))),
-        "max_model_len": int(pick(args.max_model_len, task.get("max_model_len"),
+        "samples": int(pick("samples", args.samples, task.get("n"))),
+        "max_tokens": int(pick("max_tokens", args.max_tokens, task.get("max_tokens"), cfg.get("max_tokens"))),
+        "max_model_len": int(pick("max_model_len", args.max_model_len, task.get("max_model_len"),
                                   cfg.get("max_model_len"))),
-        "temperature": float(pick(args.temperature, cfg.get("temperature"))),
-        "top_p": float(pick(args.top_p, cfg.get("top_p"))),
-        "top_k": int(pick(args.top_k, cfg.get("top_k"), -1)),
+        "temperature": float(pick("temperature", args.temperature, cfg.get("temperature"))),
+        "top_p": float(pick("top_p", args.top_p, cfg.get("top_p"))),
+        "top_k": int(pick("top_k", args.top_k, cfg.get("top_k"), default=-1)),
         "seed": cfg.get("seed", 1234),
         "tensor_parallel_size": cfg.get("tensor_parallel_size", 1),
-        "gpu_memory_utilization": float(pick(args.gpu_memory_utilization,
-                                             cfg.get("gpu_memory_utilization"), 0.90)),
-        "verifier": pick(args.verifier, task.get("verifier")),
+        "gpu_memory_utilization": float(pick("gpu_memory_utilization", args.gpu_memory_utilization,
+                                             cfg.get("gpu_memory_utilization"), default=0.90)),
+        "verifier": pick("verifier", args.verifier, task.get("verifier")),
         "out_subdir": task.get("out_subdir", ""),
         "headline_metric": task.get("headline_metric"),
     }
