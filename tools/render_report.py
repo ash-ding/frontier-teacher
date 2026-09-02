@@ -286,6 +286,12 @@ def main():
             for which in ("held_out", "seen"):
                 k = (x["config"], x["band"], x.get("variant") or "",
                      x["task"], pt["rollouts"], which)
+                # The rollouts-0 point is the untrained model, shared by every
+                # curriculum, so it is filed once under "(base model)" rather
+                # than per band. Without this the held-out line starts at 2,560
+                # and the reader loses the anchor every curve is measured from.
+                if pt["rollouts"] == 0:
+                    k = (x["config"], "(base model)", "", x["task"], 0, which)
                 pt[which] = hold.get(k)
 
     body = Path(str(ROOT / "tools" / "report_template.html")).read_text()
