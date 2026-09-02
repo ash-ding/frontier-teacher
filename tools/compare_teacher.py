@@ -26,7 +26,15 @@ OUT = ROOT / "outputs"
 # The metric each benchmark is reported on, per the project's convention.
 HEADLINE = {"math500": "pass@1", "aime": "pass@4", "hmmt": "pass@4"}
 TASKS = list(HEADLINE)
-MILESTONES = [(4, 2560), (9, 5120), (14, 7680), (19, 10240)]
+ROLLOUTS = [2560, 5120, 7680, 10240]
+# The two sources number their checkpoints differently for the same rollouts.
+# A baseline run is one verl job whose global_step counts optimiser steps from
+# 1, so its checkpoints are 5/10/15/20. A teacher run is twenty separate verl
+# jobs, each producing global_step_1, so the milestone is the loop's own step
+# index, counted from 0: 4/9/14/19. Getting this wrong prints an empty table,
+# which is at least honest, but the fix is to say which is which.
+BASE_STEP_ROLLOUTS = {5: 2560, 10: 5120, 15: 7680, 20: 10240}
+TEACHER_STEP_ROLLOUTS = {4: 2560, 9: 5120, 14: 7680, 19: 10240}
 
 # Bands in the order they are worth reading: the three that span difficulty,
 # then the matched control, then the two degenerate ends.
@@ -62,7 +70,7 @@ def band_curves(model):
         if not m:
             continue
         step, task = int(m["step"]), m["task"]
-        ro = dict((s, r) for s, r in MILESTONES).get(step)
+        ro = BASE_STEP_ROLLOUTS.get(step)
         if ro is None or task not in HEADLINE:
             continue
         c = _cell(_load(d / "summary.json"), task)
@@ -81,7 +89,7 @@ def teacher_curve(model):
         return {}, None
     fe = runs[-1]
     out = {}
-    for step, ro in MILESTONES:
+    for step, ro in TEACHER_STEP_ROLLOUTS.items():
         for task in TASKS:
             c = _cell(_load(fe / f"{model}__teacher__step{step}__{task}" /
                             "summary.json"), task)
@@ -109,6 +117,12 @@ def report(model):
     teacher, run_name = teacher_curve(model)
     if not bands and not teacher:
         return
+    on_disk = len(list((OUT / "grpo").glob(f"{model}__pass1_*")))
+    if on_disk and not bands:
+        print(f"\n=== {model} ===\n    {on_disk} band directories on disk but none "
+              f"parsed -- the step numbering has changed; fix the map, do not "
+              f"read this as 'no baseline'")
+        return
     print(f"\n=== {model} ===")
     if run_name:
         print(f"    teacher run: {run_name}")
@@ -119,17 +133,17 @@ def report(model):
         base = baseline_point(model, task)
         print(f"\n  {task}  ({HEADLINE[task]}, %)")
         print("    curriculum          " +
-              "".join(f"{r:>8}" for _, r in MILESTONES) +
+              "".join(f"{r:>8}" for r in ROLLOUTS) +
               "     end - base")
         print(f"    {'(base model)':<20}" + fmt(base).rjust(8) +
-              " " * (8 * (len(MILESTONES) - 1)))
+              " " * (8 * (len(ROLLOUTS) - 1)))
         for band in order:
             pts = bands[band].get(task, {})
-            row = "".join(fmt(pts.get(r)).rjust(8) for _, r in MILESTONES)
+            row = "".join(fmt(pts.get(r)).rjust(8) for r in ROLLOUTS)
             print(f"    {band:<20}{row}    {delta(pts.get(10240), base)}")
         if teacher.get(task):
             pts = teacher[task]
-            row = "".join(fmt(pts.get(r)).rjust(8) for _, r in MILESTONES)
+            row = "".join(fmt(pts.get(r)).rjust(8) for r in ROLLOUTS)
             print(f"    {'TEACHER':<20}{row}    {delta(pts.get(10240), base)}")
 
 
