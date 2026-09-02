@@ -131,10 +131,17 @@ def validate_data_rows(rows):
 
 
 def validate_result(obj):
-    """Light validation used only on the idempotent-restart path."""
+    """Light validation used only on the idempotent-restart path.
+
+    A step's result.json is a STEP SUMMARY, written only when the step closes on
+    a train sub-action: it carries `n_evals`, the per-eval `evals` list, and the
+    terminating `train`. `step`/`status` are required; `train` +
+    `latest_checkpoint_hf_path` mark a genuinely completed TRAINING step (the
+    orchestrator additionally checks those before treating a step as closed).
+    """
     if not isinstance(obj, dict):
         raise ProtocolError("result.json is not a JSON object")
-    for k in ("step", "decision", "status"):
+    for k in ("step", "status"):
         if k not in obj:
             raise ProtocolError(f"result.json missing required key {k!r}")
     return obj

@@ -20,9 +20,17 @@ consecutive_failure_abort: 2  # failure-streak threshold recorded on the abort-l
 halt_on_duplicate: true       # halt if a step's (decision, data) repeats verbatim
 
 # --- run / workspace -----------------------------------------------------------
-steps: 4                                    # default; overridden by --steps
+# 1 step == 1 TRAINING update. Within a step the teacher may EVALUATE any number
+# of times (each on the SAME latest checkpoint); the step only CLOSES and advances
+# when the teacher chooses to TRAIN. `--steps N` therefore means N GRPO updates.
+steps: 4                                    # default N training steps; overridden by --steps
 out_root: outputs/teacher_curriculum        # run_<id>/ workspaces land here
 n_gpus: 8
+# The teacher may evaluate at most this many times within a single step before it
+# must train. Reaching the cap WITHOUT a train decision halts the run cleanly
+# (descriptive halt event, rc=1) -- we never fabricate a train. Overridable with
+# --max-evals-per-step.
+max_evals_per_step: 10
 
 # --- student / GRPO ------------------------------------------------------------
 grpo_config: llama32-3b                      # preset selector for run_teacher_step.sh
