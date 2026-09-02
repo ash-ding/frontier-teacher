@@ -154,17 +154,17 @@ def resolve_name(args, R):
 
 
 def resolve(args):
-    """Settle every setting.
+    """Settle every setting. For each field independently:
 
-    A config and the command line are two ways to describe one run, not layers.
-    A field named in both is an error, so there is no precedence to remember and
-    no way for one source to quietly beat the other. Where neither names a
-    field, DEFAULTS applies.
+        command line  ->  config  ->  the script's default in DEFAULTS
 
-    Evaluating a checkpoint therefore means a config for that checkpoint, or a
-    command line - not a base model's config with one field overridden. That
-    would be the case where precedence matters, and it is the case where getting
-    it wrong evaluates the wrong weights while looking like it worked.
+    A config is a starting point, not a contract: pointing --model at a
+    checkpoint and keeping everything else from the model's benchmark config is
+    the normal way to evaluate one, and that only works if the command line
+    wins.
+
+    Precedence is a rule you would otherwise have to hold in your head, so every
+    run prints each setting with the source it came from.
 
     `--out` is not a setting and does not take part; it says where to write.
     """
@@ -183,14 +183,6 @@ def resolve(args):
     }
     cli = {k: v for k, v in cli.items() if v is not None}
 
-    clash = sorted(set(cli) & set(cfg))
-    if clash:
-        raise SystemExit(
-            f"set in both {args.config} and on the command line: "
-            + ", ".join(clash)
-            + ".\nA config and the command line are two ways to describe one run.\n"
-              "To evaluate different weights, write a config for them or give the "
-              "whole run on the command line.")
     R = {**DEFAULTS, **cfg, **cli}
     for req in ("model", "data", "label"):
         if not R.get(req):
