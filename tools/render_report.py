@@ -4,7 +4,7 @@ No plotting dependency: the panels are hand-written SVG. matplotlib is
 deliberately not installed in the training environment, and adding it to render
 a figure would mean touching an environment that nine runs depend on.
 
-  python tools/render_report.py --curves outputs/curves.json --out report.html
+  python tools/render_report.py --curves outputs/analysis/curves.json --out report.html
 """
 import argparse
 import json
@@ -60,8 +60,13 @@ def slot_of(role):
 
 def panel(series, task, cfg):
     """One SVG panel: every band of one configuration on one benchmark."""
+    # The matched-group-size controls are in the table, not here. Drawn as a
+    # dashed twin of the band they re-run, they doubled the number of lines in
+    # every middle panel to carry one fact - that group size moved nothing
+    # consistently - which a table row states better than a line the eye has to
+    # separate from its own default.
     rows = [s for s in series if s["config"] == cfg and s["task"] == task
-            and role_of(s["band"])]
+            and role_of(s["band"]) and not s.get("variant")]
     if not rows:
         return f'<div class="panel empty">no data</div>'
 
@@ -158,7 +163,7 @@ def panel(series, task, cfg):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--curves", default=str(ROOT / "outputs" / "curves.json"))
+    ap.add_argument("--curves", default=str(ROOT / "outputs" / "analysis" / "curves.json"))
     ap.add_argument("--out", default=str(ROOT / "outputs" / "report.html"))
     ap.add_argument("--stats", default="", help="optional JSON of paired results")
     a = ap.parse_args()
@@ -168,7 +173,7 @@ def main():
     # Never print a delta without its interval. paired_stats.py resamples both
     # problems and generations; a table showing only the point estimate would
     # imply a precision the five-point curves do not have.
-    stats_path = Path(a.stats) if a.stats else ROOT / "outputs" / "paired_stats.json"
+    stats_path = Path(a.stats) if a.stats else ROOT / "outputs" / "analysis" / "paired_stats.json"
     stats = {}
     if stats_path.exists():
         for r in json.loads(stats_path.read_text()):
@@ -194,9 +199,11 @@ def main():
     for ckey, cname, _ in CONFIGS:
         for slugs, role, _ in BANDS:
             for tkey, tname, metric, _k in TASKS:
+              # default first, then its matched-group-size re-run if there is one
+              for variant in ("", "g32"):
                 s = next((x for x in series if x["config"] == ckey
                           and x["task"] == tkey and x["band"] in slugs
-                          and not x.get("variant")), None)
+                          and (x.get("variant") or "") == variant), None)
                 if not s:
                     continue
                 vals = {p["rollouts"]: p["score"] for p in s["points"]}
@@ -213,7 +220,9 @@ def main():
                 # MATH-500's headline already IS pass@1; showing it twice invites
                 # the reader to think two different things were measured.
                 p1 = '<td class="na"></td>' if metric == "pass@1" else fmt("pass@1")
-                trs.append(f'<tr><td>{cname}</td><td>{BAND_LABEL[role]}</td>'
+                label = BAND_LABEL[role] + (" &mdash; matched G=32" if variant else "")
+                trs.append(f'<tr{" class=variant" if variant else ""}>'
+                           f'<td>{cname}</td><td>{label}</td>'
                            f'<td>{tname} {metric}</td>{cells}'
                            f'{fmt(metric)}{p1}</tr>')
     body = body.replace("<!--TABLE-->", "\n".join(trs))
