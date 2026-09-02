@@ -1,0 +1,33 @@
+# llama32-3b on mathtrain.
+#
+# The 11,996-problem training pool, not a benchmark: this is the
+# difficulty profile the training subsets are cut from. Lands in
+# its own subdirectory.
+#
+# Llama 3.2 has no reasoning mode, so enable_thinking is
+# absent rather than false - its template rejects the argument.
+#
+# One config, one evaluation. Every field may also be given on the command
+# line; a field set here wins, and the run says which command-line values
+# it ignored. Point --weights at a checkpoint to evaluate that instead -
+# the output tag follows the weights, so a baseline cannot be overwritten.
+
+model: unsloth/Llama-3.2-3B-Instruct
+model_label: llama32-3b
+label: mathtrain
+
+data:
+  - data/training_set/math_train_orig_train.jsonl
+  - data/training_set/math_train_orig_test.jsonl
+
+samples: 8
+verifier: symbolic
+headline_metric: "pass@1"
+out_subdir: math_profiling
+
+temperature: 0.6
+top_p: 0.9
+top_k: -1
+max_tokens: 4096
+max_model_len: 8192
+seed: 1234

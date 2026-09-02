@@ -73,7 +73,7 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
       pids=()
       for g in $missing; do
         CUDA_VISIBLE_DEVICES=$g VLLM_LOGGING_LEVEL=WARNING \
-          python eval/evaluate.py --config "configs/eval/${CFG}.yaml" --task "$task" \
+          python eval/evaluate.py --config "configs/eval/${CFG}__${task}.yaml" \
             --weights "$d" --name "$tag" --shard "$g" --num-shards "$NGPU" \
             \
             > "logs/eval__${tag}__${task}__s${g}.log" 2>&1 &
@@ -100,7 +100,7 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
 
     done_n=$(ls outputs/${tag}__${task}__s*of${NGPU}.summary.json 2>/dev/null | wc -l)
     if [ "$done_n" -eq "$NGPU" ]; then
-      python eval/merge_shards.py --config "configs/eval/${CFG}.yaml" --task "$task" \
+      python eval/merge_shards.py --config "configs/eval/${CFG}__${task}.yaml" \
         --name "$tag" > "logs/merge__${tag}__${task}.log" 2>&1 \
         && rm -f outputs/${tag}__${task}__s*of${NGPU}.records.jsonl \
                  outputs/${tag}__${task}__s*of${NGPU}.summary.json \

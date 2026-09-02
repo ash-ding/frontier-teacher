@@ -20,7 +20,7 @@ for cfg in $CONFIGS; do
   for task in $TASKS; do
     log="logs/${cfg}__${task}.log"
     CUDA_VISIBLE_DEVICES=$((i % 8)) VLLM_LOGGING_LEVEL=WARNING \
-      nohup python eval/evaluate.py --config "configs/eval/${cfg}.yaml" --task "$task" \
+      nohup python eval/evaluate.py --config "configs/eval/${cfg}__${task}.yaml" \
         > "$log" 2>&1 &
     echo "  gpu $((i % 8))  ${cfg}/${task}  pid $!"
     i=$((i+1))

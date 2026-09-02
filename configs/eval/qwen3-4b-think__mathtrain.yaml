@@ -1,0 +1,34 @@
+# qwen3-4b-think on mathtrain.
+#
+# The 11,996-problem training pool, not a benchmark: this is the
+# difficulty profile the training subsets are cut from. Lands in
+# its own subdirectory.
+#
+# Grading uses only what follows </think>: a reasoning model writes
+# candidate answers while working, and those are not its answer.
+#
+# One config, one evaluation. Every field may also be given on the command
+# line; a field set here wins, and the run says which command-line values
+# it ignored. Point --weights at a checkpoint to evaluate that instead -
+# the output tag follows the weights, so a baseline cannot be overwritten.
+
+model: Qwen/Qwen3-4B
+model_label: qwen3-4b-think
+label: mathtrain
+
+data:
+  - data/training_set/math_train_orig_train.jsonl
+  - data/training_set/math_train_orig_test.jsonl
+
+samples: 8
+verifier: symbolic
+headline_metric: "pass@1"
+out_subdir: math_profiling
+
+temperature: 0.6
+top_p: 0.95
+top_k: 20
+max_tokens: 30000
+max_model_len: 32768
+seed: 1234
+enable_thinking: true

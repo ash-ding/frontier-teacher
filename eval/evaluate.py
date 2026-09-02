@@ -1,10 +1,14 @@
 """Evaluate one model on one benchmark: generate, grade, persist everything.
 
-Interfaces are explicit and overridable, because every one of them has needed to
-vary: the data, the model, where results land, how many samples, how long a
-response may be, whether the model reasons out loud, and which verifier decides
-correctness. A config file supplies defaults; the command line overrides any of
-them, so a checkpoint sweep does not need 36 near-identical config files.
+Every setting has needed to vary at some point: the data, the model, how many
+samples, how long a response may be, whether the model reasons out loud, which
+verifier decides correctness, where results land. So all of them are settable
+two ways, and for each field independently the order is:
+
+    config, if it names the field -> command line -> the script's default.
+
+The config wins, which is the opposite of the usual convention, so a run prints
+which command-line values it ignored rather than letting one quietly do nothing.
 
 Three things are deliberately not optional:
 
@@ -17,12 +21,20 @@ Three things are deliberately not optional:
   whole ladder for free, and one k hides the shape: a problem solved once in
   sixteen and one solved every time both score pass@16 = 1.
 
-  The verifier is named, never inferred. Previously `integer_answer` defaulted
-  to `args.task == "aime"` inside the loop, so "unset" meant different things
-  for different tasks and only the source revealed which.
+  The verifier is named, never inferred. `integer_answer` used to default to
+  `args.task == "aime"` inside the loop, so "unset" meant different things for
+  different benchmarks and only the source revealed which.
 
-  python eval/evaluate.py --config configs/eval/llama32-3b.yaml --task math500
-  python eval/evaluate.py --config ... --task aime --weights <ckpt-dir>
+There is no --task. A benchmark is not a name to look up in a catalogue, it is a
+data file plus how to sample and grade it - which is exactly what a config holds.
+Removing the lookup is what lets a pipeline evaluate data it has just written:
+--data takes any path, resolved against the working directory rather than data/,
+so nothing has to be registered first.
+
+  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml
+  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml --weights <ckpt-dir>
+  python eval/evaluate.py --model Qwen/Qwen3-4B --data /abs/step7/data.jsonl \
+                          --label teacher_step7 --verifier symbolic --samples 4
 """
 from __future__ import annotations
 
@@ -41,9 +53,8 @@ from verifiers import get_verifier                 # noqa: E402
 from verifiers.extract import answer_segment       # noqa: E402
 
 # Every field's fallback lives here, in the script. A config or the command line
-# may set a field; when neither does, this is what applies. Nothing falls back
-# through the config to reach a default, because a three-level chain is exactly
-# the ambiguity that makes "why did it use 0.9?" hard to answer.
+# may name a field; when neither does, this applies. There is no chain through
+# the config to reach a default.
 DEFAULTS = {
     "samples": 4,
     "max_tokens": 4096,
@@ -58,11 +69,8 @@ DEFAULTS = {
     "enable_thinking": None,      # absent, not false: Llama's template rejects it
     "out_subdir": "",
     "headline_metric": None,
+    "model_label": None,      # short name for the model in output tags
 }
-
-# Fields a config may set. Anything here that is ALSO given on the command line
-# is an error rather than a silent precedence decision.
-CONFIG_FIELDS = set(DEFAULTS) | {"model"}
 
 
 PROMPT = ("Solve the following math problem. Reason step by step, and put your "
@@ -71,14 +79,20 @@ PROMPT = ("Solve the following math problem. Reason step by step, and put your "
 
 def build_args():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--config", required=True, help="configs/eval/<model>.yaml")
-    ap.add_argument("--task", required=True, help="a key under `tasks:` in the config")
+    ap.add_argument("--config", default=None,
+                    help="a config describing one evaluation; see configs/eval/. "
+                         "Optional - every setting can be given on the command line.")
 
     g = ap.add_argument_group("paths - each overridable so one config serves many runs")
     g.add_argument("--data", nargs="*", default=None,
-                   help="dataset JSONL(s), relative to data/ or absolute; "
-                        "default: the task's own data_files")
+                   help="dataset JSONL(s). Any path: absolute, or relative to the "
+                        "working directory. Nothing is resolved under data/, so a "
+                        "pipeline evaluating data it just generated needs no "
+                        "registration and no symlink.")
     g.add_argument("--out", default=None, help="output directory (default: outputs/)")
+    g.add_argument("--label", default=None,
+                   help="short name for what is being evaluated, e.g. aime. Forms "
+                        "the second half of the output tag.")
     g.add_argument("--weights", default=None,
                    help="evaluate THESE weights using the config's profile - a "
                         "checkpoint directory. Distinct from the config's `model`, "
@@ -111,102 +125,79 @@ def build_args():
     return ap.parse_args()
 
 
-def resolve_name(args, cfg):
-    """The output tag. Explicit --name wins; otherwise it follows the weights.
+def resolve_name(args, R):
+    """The output tag: <label of what was evaluated>__<label of the data>.
 
-    `name` forms the filename, so two runs sharing one name overwrite each
-    other. That is a real hazard rather than a theoretical one: evaluating a
-    checkpoint with the base model's config and forgetting --name silently
-    replaces that model's baseline - the rollout-0 anchor every curve and every
-    paired comparison is measured against - with a trained checkpoint's score,
-    and nothing warns you.
-
-    So a run that points --weights somewhere gets a name derived from where:
+    `name` forms the filename, so two runs sharing one overwrite each other.
+    Evaluating a checkpoint and forgetting to rename would replace a baseline -
+    the rollout-0 anchor every curve is measured against - with a checkpoint's
+    score, silently. So the name follows the weights: give --weights and the tag
+    is derived from the experiment and step in that path, whatever else is
+    forgotten.
 
         .local_checkpoints/llama32-3b__pass1_05-15pct/global_step_20/actor/huggingface
-        -> llama32-3b__pass1_05-15pct__step20
-
-    A run without --weights is evaluating the config's own model and keeps the
-    config's name, which is what the baselines are called.
+        -> llama32-3b__pass1_05-15pct__step20__<label>
     """
     if args.name:
         return args.name
-    if not args.weights:
-        return cfg["name"]
-
-    parts = Path(args.weights).resolve().parts
-    step = next((p for p in reversed(parts) if p.startswith("global_step_")), None)
-    if step:
-        exp = parts[parts.index(step) - 1]
-        return f"{exp}__step{step.rsplit('_', 1)[1]}"
-    # Some other directory of weights: fall back to its own name, which at least
-    # cannot collide with a baseline.
-    return f"{cfg['name']}__{Path(args.weights).name}"
+    subject = R.get("model_label") or Path(R["model"]).name
+    if args.weights:
+        parts = Path(args.weights).resolve().parts
+        step = next((p for p in reversed(parts) if p.startswith("global_step_")), None)
+        subject = (f"{parts[parts.index(step) - 1]}__step{step.rsplit('_', 1)[1]}"
+                   if step else Path(args.weights).name)
+    return f"{subject}__{R['label']}"
 
 
 def resolve(args):
-    """Merge script defaults, the config, and the command line into one dict.
+    """Settle every setting. Precedence, for each field independently:
 
-    Config and command line are two ways of saying the same thing, not layers:
-    a field set in both is an error, not a precedence decision. That rules out
-    the class of surprise where a config value is quietly ignored because some
-    orchestration script also passed the flag - which is how a run ends up
-    sampling at a temperature nobody chose.
+        1. the config, if it names the field
+        2. the command line, if it was given
+        3. the script's own default, from DEFAULTS
 
-    The one pair that looks like a conflict and is not: the config's `model`
-    names the model whose profile this is, and --weights points at weights to
-    evaluate with that profile. Different questions, different fields.
+    Config wins over the command line. That is the opposite of the usual
+    convention, so a run says out loud which command-line values it ignored
+    rather than letting one quietly do nothing.
+
+    Two fields are not settings and do not take part: `--weights` names weights
+    to evaluate with this config's profile, and `--out` says where to write.
     """
     cfg = yaml.safe_load(open(args.config)) if args.config else {}
-    if args.config and args.task not in cfg.get("tasks", {}):
-        raise SystemExit(f"task {args.task!r} not in {args.config}; "
-                         f"have {sorted(cfg.get('tasks', {}))}")
-    task = cfg.get("tasks", {}).get(args.task, {})
+    cfg = {k: v for k, v in cfg.items() if v is not None}
 
     cli = {
         "samples": args.samples, "max_tokens": args.max_tokens,
         "max_model_len": args.max_model_len, "temperature": args.temperature,
         "top_p": args.top_p, "top_k": args.top_k,
         "gpu_memory_utilization": args.gpu_memory_utilization,
-        "verifier": args.verifier,
+        "verifier": args.verifier, "model": args.model, "label": args.label,
+        "data": args.data,
         "enable_thinking": None if args.thinking is None else args.thinking == "true",
     }
     cli = {k: v for k, v in cli.items() if v is not None}
 
-    # A task's settings are part of the config, so a task-level `n` collides
-    # with --samples exactly as a top-level one would.
-    from_cfg = {k: v for k, v in {**cfg, **task}.items()
-                if k in CONFIG_FIELDS and k != "model"}
-    if task.get("n") is not None:
-        from_cfg["samples"] = task["n"]
+    shadowed = sorted(set(cli) & set(cfg))
+    if shadowed:
+        print(f"note: {args.config} sets {', '.join(shadowed)}; the matching "
+              f"command-line values are ignored.")
 
-    clash = sorted(set(cli) & set(from_cfg))
-    if clash:
-        raise SystemExit(
-            "these are set in both " + args.config + " and on the command line: "
-            + ", ".join(clash) + ".\nPick one. Config and command line are two "
-            "ways to specify a run, not a precedence chain.")
+    R = {**DEFAULTS, **cli, **cfg}
+    for req in ("model", "data", "label"):
+        if not R.get(req):
+            raise SystemExit(
+                f"{req!r} is not set. Give --{req} on the command line, or set "
+                f"{req}: in a config. See configs/eval/ for a complete example.")
 
-    R = {**DEFAULTS, **from_cfg, **cli}
-    R["task"] = args.task
-    R["model"] = args.weights or cfg.get("model")
-    if not R["model"]:
-        raise SystemExit("no model: give --weights, or set `model:` in the config.")
-    R["name"] = resolve_name(args, cfg)
-    R["profile_model"] = cfg.get("model")
+    R["data_files"] = [Path(p).expanduser().resolve()
+                       for p in ([R["data"]] if isinstance(R["data"], str) else R["data"])]
+    R["weights"] = args.weights or R["model"]
+    R["name"] = resolve_name(args, R)
     for k in ("samples", "max_tokens", "max_model_len", "top_k", "seed",
               "tensor_parallel_size"):
         R[k] = int(R[k])
     for k in ("temperature", "top_p", "gpu_memory_utilization"):
         R[k] = float(R[k])
-
-    names = args.data or task.get("data_files") or ([task["data_file"]]
-                                                    if task.get("data_file") else [])
-    if not names:
-        raise SystemExit(f"no dataset: give --data, or declare data_files under "
-                         f"task {args.task!r} in the config.")
-    R["data_files"] = [Path(n) if Path(n).is_absolute() else ROOT / "data" / n
-                       for n in names]
     return R
 
 
@@ -226,7 +217,7 @@ def main():
     if not rows:
         raise SystemExit("no problems selected")
 
-    tag = f"{R['name']}__{R['task']}"
+    tag = R["name"]
     if args.num_shards > 1:
         tag += f"__s{args.shard}of{args.num_shards}"
     verifier = get_verifier(R["verifier"])
@@ -234,13 +225,13 @@ def main():
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
 
-    tok = AutoTokenizer.from_pretrained(R["model"])
+    tok = AutoTokenizer.from_pretrained(R["weights"])
     tkw = {} if R["enable_thinking"] is None else {"enable_thinking": R["enable_thinking"]}
     prompts = [tok.apply_chat_template(
         [{"role": "user", "content": PROMPT.format(problem=r["problem"])}],
         tokenize=False, add_generation_prompt=True, **tkw) for r in rows]
 
-    llm = LLM(model=R["model"], tensor_parallel_size=R["tensor_parallel_size"],
+    llm = LLM(model=R["weights"], tensor_parallel_size=R["tensor_parallel_size"],
               gpu_memory_utilization=R["gpu_memory_utilization"],
               max_model_len=R["max_model_len"], dtype="bfloat16", seed=R["seed"],
               enforce_eager=False, trust_remote_code=True)
@@ -277,7 +268,8 @@ def main():
                             "samples": per_sample})
 
     summary = summarize(records, extra={
-        "tag": tag, "task": R["task"], "model": R["model"], "profile": R["profile_model"], "config": R["name"],
+        "tag": tag, "label": R["label"], "model": R["weights"],
+        "profile_model": R["model"],
         "verifier": R["verifier"], "gen_seconds": gen_s,
         "sampling": {k: R[k] for k in ("temperature", "top_p", "top_k",
                                        "max_tokens", "seed")} |

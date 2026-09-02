@@ -1,0 +1,30 @@
+# qwen3-4b-nothink on hmmt_feb_2026.
+#
+# One competition, post-cutoff for these models.
+#
+# enable_thinking: false makes Qwen3's template inject an empty
+# <think></think>, which is how the mode is switched off.
+#
+# One config, one evaluation. Every field may also be given on the command
+# line; a field set here wins, and the run says which command-line values
+# it ignored. Point --weights at a checkpoint to evaluate that instead -
+# the output tag follows the weights, so a baseline cannot be overwritten.
+
+model: Qwen/Qwen3-4B
+model_label: qwen3-4b-nothink
+label: hmmt_feb_2026
+
+data:
+  - data/benchmark/hmmt_feb_2026.jsonl
+
+samples: 16
+verifier: symbolic
+headline_metric: "pass@4"
+
+temperature: 0.7
+top_p: 0.8
+top_k: 20
+max_tokens: 8192
+max_model_len: 16384
+seed: 1234
+enable_thinking: false

@@ -1,0 +1,35 @@
+# llama32-3b on aime.
+#
+# 150 problems, 2020-2024. Answers are integers 0-999 by the
+# competition's rules, so exact comparison is both correct and
+# free of symbolic-equivalence ambiguity.
+#
+# Llama 3.2 has no reasoning mode, so enable_thinking is
+# absent rather than false - its template rejects the argument.
+#
+# One config, one evaluation. Every field may also be given on the command
+# line; a field set here wins, and the run says which command-line values
+# it ignored. Point --weights at a checkpoint to evaluate that instead -
+# the output tag follows the weights, so a baseline cannot be overwritten.
+
+model: unsloth/Llama-3.2-3B-Instruct
+model_label: llama32-3b
+label: aime
+
+data:
+  - data/benchmark/aime_2020.jsonl
+  - data/benchmark/aime_2021.jsonl
+  - data/benchmark/aime_2022.jsonl
+  - data/benchmark/aime_2023.jsonl
+  - data/benchmark/aime_2024.jsonl
+
+samples: 8
+verifier: exact_integer
+headline_metric: "pass@4"
+
+temperature: 0.6
+top_p: 0.9
+top_k: -1
+max_tokens: 4096
+max_model_len: 8192
+seed: 1234
