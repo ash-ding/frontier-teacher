@@ -302,7 +302,6 @@ def main():
         for ckey, _, _ in CONFIGS:
             leak.append(leak_panel(series, tkey, ckey))
     body = body.replace("<!--GRID_LEAK-->", "\n".join(leak))
-    body = body.replace("<!--COLHEADS_3-->", heads)
     # Say which configurations have a teacher run rather than letting a missing
     # line read as a flat one.
     have = sorted({x["config"] for x in series if x["band"] == "teacher"})
@@ -316,6 +315,7 @@ def main():
                     for _, n, r in CONFIGS)
     body = body.replace("<!--COLHEADS-->", heads)
     body = body.replace("<!--COLHEADS_2-->", heads)
+    body = body.replace("<!--COLHEADS_3-->", heads)
 
     # the table is not decoration: the aqua series fails 3:1 contrast against the
     # light surface, so a non-colour reading of every value has to exist
