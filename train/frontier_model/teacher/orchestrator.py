@@ -125,7 +125,8 @@ class Orchestrator:
     }
 
     def __init__(self, config_path, dry_run, steps=None, max_evals_per_step=None,
-                 output_path=None, reference_data=None, dry_always_eval=False):
+                 output_path=None, reference_data=None, dry_always_eval=False,
+                 resume=None):
         self.config_path = Path(config_path)
         cfg = yaml.safe_load(self.config_path.read_text()) or {}
         cli = {k: v for k, v in {"steps": steps,
@@ -141,17 +142,28 @@ class Orchestrator:
 
         # Runs are named by when they happened. A caller-supplied name is one more
         # thing to keep unique, and a repeat silently writes into a finished run.
-        rid = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        out = Path(self.config["output_path"]).expanduser()
-        if not out.is_absolute():
-            out = ROOT / out
-        self.run_dir = (out / f"run_{rid}").resolve()
+        # --resume is the one way back into an existing run: it names the exact
+        # directory, and recover_state rebuilds the position from the artifacts
+        # in it rather than from anything the caller asserts.
+        if resume:
+            self.run_dir = Path(resume).expanduser().resolve()
+            if not (self.run_dir / "events.jsonl").exists():
+                raise SystemExit(f"--resume: {self.run_dir} is not a run directory")
+        else:
+            rid = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+            out = Path(self.config["output_path"]).expanduser()
+            if not out.is_absolute():
+                out = ROOT / out
+            self.run_dir = (out / f"run_{rid}").resolve()
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
         # The teacher sees one reference file, copied in rather than mounted, so
         # what it read is part of the run's record. Absent means it sees none.
         self.reference_file = None
-        ref = self.config.get("reference_data")
+        if resume:
+            existing = sorted(self.run_dir.glob("reference.*"))
+            self.reference_file = existing[0] if existing else None
+        ref = None if resume else self.config.get("reference_data")
         if ref:
             src = Path(ref).expanduser()
             if not src.is_file():
@@ -192,6 +204,13 @@ class Orchestrator:
 
         # What will run the teacher's decisions, copied in so the teacher reads the
         # code that will actually execute rather than a description of it.
+        # On a resume the code may have changed since the steps already on disk
+        # ran. Overwriting the snapshot would erase the record of what produced
+        # them, so the old one is kept under the timestamp it is superseded at.
+        old = self.run_dir / "pipeline"
+        if resume and old.exists():
+            old.rename(self.run_dir / f"pipeline.superseded_"
+                                      f"{_dt.datetime.now():%Y%m%d_%H%M%S}")
         self.pipeline_dir = tools.snapshot_pipeline(
             self.run_dir, ROOT, self.config, self.resolved_settings())
 
@@ -738,6 +757,9 @@ def main():
     ap.add_argument("--reference-data", default=None,
                     help="a single data file to copy into the run directory for the "
                          "teacher to read; overrides the config. Omit for none.")
+    ap.add_argument("--resume", default=None,
+                    help="continue an existing run directory instead of starting "
+                         "a new one; the position is rebuilt from its artifacts")
     ap.add_argument("--dry-run", action="store_true", help="no-GPU protocol self-test")
     ap.add_argument("--dry-always-eval", action="store_true",
                     help="dry-run cap harness: teacher only ever evaluates")
@@ -746,7 +768,7 @@ def main():
                         max_evals_per_step=a.max_evals_per_step,
                         output_path=a.output_path,
                         reference_data=a.reference_data,
-                        dry_always_eval=a.dry_always_eval)
+                        dry_always_eval=a.dry_always_eval, resume=a.resume)
     return orch.run()
 
 

@@ -159,6 +159,12 @@ python train/frontier_model/teacher/orchestrator.py \
     --reference-data /abs/path/to/some.jsonl        # optional
 python train/frontier_model/teacher/orchestrator.py \
     --config configs/grpo/llama32-3b-teacher.yaml --dry-run   # no-GPU self-test
+
+# continue an interrupted run; the position is rebuilt from its artifacts, and
+# the closed steps are not re-run
+python train/frontier_model/teacher/orchestrator.py \
+    --config configs/grpo/llama32-3b-teacher.yaml \
+    --resume outputs/frontier-model/run_20260902_072619
 ```
 
 One step is one GRPO update. Within a step the teacher may evaluate the current
