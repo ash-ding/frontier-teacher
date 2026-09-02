@@ -1,0 +1,25 @@
+# The exact verl this project's results were produced with.
+#
+# The source is NOT committed - `scripts/fetch_verl_source.sh` fetches it into
+# third_party/, which .gitignore excludes. What is committed is the pin below,
+# which is enough to reconstruct the source byte for byte.
+#
+# Verified 2026-09-02 on lumen-2: all 362 .py files in the installed wheel are
+# sha256-identical to the same files at the commit below. Re-check any time with
+# `scripts/fetch_verl_source.sh --verify`.
+
+VERL_VERSION=0.9.0
+VERL_COMMIT=483b8a009ba3a97563edee3a19887e4862b8094a
+VERL_REPO=https://github.com/verl-project/verl
+
+# The repository was renamed: volcengine/verl now 301-redirects here. Old links
+# still work, but the API needs the new name.
+VERL_REPO_OLD=https://github.com/volcengine/verl
+
+# PyPI artefacts for verl 0.9.0, uploaded 2026-08-14. pip installed the wheel;
+# INSTALLER=pip and the absence of direct_url.json in the dist-info confirm it
+# came from PyPI rather than a git checkout.
+VERL_WHEEL=verl-0.9.0-py3-none-any.whl
+VERL_WHEEL_SHA256=6e9374db1e2ab346a0aafe9a202bee1b239a042def2f2ccd6db2a4cd04c6308b
+VERL_SDIST=verl-0.9.0.tar.gz
+VERL_SDIST_SHA256=41a7ebff5482a94fe1b0311ec48825fcb10123f9420801ca1b8e7e1d122f3f12

@@ -42,3 +42,11 @@ outputs_xval/
 # verl-format conversions of the subsets; regenerate with src/to_verl_dataset.py
 *.verl.jsonl
 outputs/checkpoints/
+
+# third_party/ holds a read-only snapshot of verl's source, fetched by
+# scripts/fetch_verl_source.sh at the commit pinned in third_party/verl.lock.
+# The pin reconstructs it byte for byte, so committing 8.3 MB across 362 files
+# would only bury this repository's own history in git log and git grep.
+# The lock file itself IS tracked - it is the pin.
+third_party/*
+!third_party/verl.lock
