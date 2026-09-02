@@ -1,4 +1,9 @@
-# The teacher-in-the-loop curriculum loop.
+# The teacher-in-the-loop curriculum loop -- Qwen3-4B, thinking OFF.
+#
+# Sibling of llama32-3b-teacher.yaml. Everything about the loop is the same;
+# what changes is the student and the decoding its evaluations use, both
+# taken verbatim from configs/eval/qwen3-4b-nothink__*.yaml so a teacher run
+# and the no-teacher baseline are scored identically.
 #
 # This configures train/frontier_model/teacher/orchestrator.py. Every field can
 # also be given on the command line, and for each field independently the command
@@ -48,8 +53,8 @@ test_shards: 1                # reference tests on one GPU; see the qwen3-4b-thi
 # --- student and its GRPO update -----------------------------------------------
 # The student, and the shape of every training step. run_teacher_step.sh takes
 # these as arguments rather than deriving any of them from the teacher's file.
-base_model: unsloth/Llama-3.2-3B-Instruct   # step-0 weights; matches the preset
-grpo_config: llama32-3b       # preset in run_teacher_step.sh: max response length,
+base_model: Qwen/Qwen3-4B                   # step-0 weights; matches the preset
+grpo_config: qwen3-4b-nothink     # preset in run_teacher_step.sh: max response length,
                               # temperature/top_p/top_k, vLLM memory fraction
 n_gpus: 8
 # G=32, TB=16, MB=8 is run_grpo.sh's sizing for its G=32 bands, verbatim. A
@@ -123,14 +128,15 @@ pipeline_source:
 # eval/evaluate.py is invoked on the command line against the teacher's own
 # data.jsonl; these supply its settings, and they too are the same every step.
 eval_base:
-  temperature: 0.6
-  top_p: 0.9
-  top_k: -1
+  temperature: 0.7
+  top_p: 0.8
+  top_k: 20
   seed: 1234
   tensor_parallel_size: 1
   gpu_memory_utilization: 0.90
 teacher_eval:
   samples: 4            # gives pass@1 through pass@4 from one run
-  max_tokens: 4096
-  max_model_len: 8192
+  max_tokens: 8192
+  max_model_len: 16384
   verifier: symbolic    # the teacher's problems are MATH-style exact forms
+  enable_thinking: false

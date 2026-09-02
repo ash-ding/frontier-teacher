@@ -117,6 +117,8 @@ class Orchestrator:
         "consecutive_failure_abort": 2,
         "pipeline_source": [],
         "reference_tests": [],
+        "test_shards": 1,
+        "keep_checkpoint_every": 5,
         "reference_data": None,
         "eval_base": {},
         "teacher_eval": {},
@@ -179,6 +181,14 @@ class Orchestrator:
                 f"train_batch_size * group_size "
                 f"({self.train_batch_size * self.group_size}) is not divisible by "
                 f"n_gpus {n_gpus}; verl requires this")
+
+        # Checkpoints are node-local. A step writes ~12-16 GB, and over 20 steps
+        # that is 240-320 GB - more than any of these containers has, and
+        # pointless to push over a fuse mount besides. run_dir is on the shared
+        # bucket and holds everything else.
+        self.ckpt_root = ROOT / ".local_checkpoints" / self.run_dir.name
+        self.ckpt_root.mkdir(parents=True, exist_ok=True)
+        self.keep_every = int(self.config["keep_checkpoint_every"])
 
         # What will run the teacher's decisions, copied in so the teacher reads the
         # code that will actually execute rather than a description of it.
@@ -392,8 +402,11 @@ class Orchestrator:
                 break
 
         # ---- if the terminating train already finished, just finalize ----------
+        # The weights live outside the run directory (node-local); the record of
+        # the train stays in it.
         train_dir = step_dir / "train"
-        train_hf = train_dir / "ckpt" / "global_step_1" / "actor" / "huggingface"
+        train_hf = (self.ckpt_root / f"step_{step}" / "global_step_1" / "actor"
+                    / "huggingface")
         if train_hf.exists():
             train_stats, train_teacher = self._train_from_artifacts(train_dir)
             new_ckpt = str(train_hf)
@@ -502,15 +515,38 @@ class Orchestrator:
             results[name] = stats
         return results or None
 
+    def prune_checkpoints(self, step):
+        """Drop every checkpoint that is neither a milestone nor the current one.
+
+        A step's weights are needed by exactly one thing: the next step. Keeping
+        all 20 would be 240-320 GB. `keep_checkpoint_every: 5` keeps the ones at
+        5, 10, 15 and 20 updates -- the same rollout milestones the baseline
+        curves are evaluated at, so the two are comparable point for point.
+        """
+        kept, dropped = [], []
+        for d in sorted(self.ckpt_root.glob("step_*")):
+            k = int(d.name.split("_")[1])
+            if k == step or (k + 1) % self.keep_every == 0:
+                kept.append(k)
+                continue
+            shutil.rmtree(d, ignore_errors=True)
+            dropped.append(k)
+        if dropped:
+            self.event(step, "checkpoints_pruned", dropped=dropped, kept=sorted(kept))
+        return sorted(kept)
+
     def _close_step(self, step, step_dir, evals, train_stats, train_teacher, new_ckpt):
         """Write the STEP SUMMARY result.json + run_state, emit step_done."""
         ref_test = self.run_reference_tests(step, step_dir / "test", new_ckpt)
+        # after the tests have read it, not before
+        kept = self.prune_checkpoints(step)
         result = {
             "step": step, "status": "ok", "n_evals": len(evals),
             "evals": evals,
             "train": {**(train_stats or {}), "teacher": train_teacher},
             "reference_test": ref_test,
             "latest_checkpoint_hf_path": new_ckpt,
+            "checkpoints_kept": kept,
         }
         protocol.atomic_write_json(step_dir / "result.json", result)
         protocol.atomic_write_json(self.run_state, {
@@ -590,8 +626,9 @@ class Orchestrator:
             stats = self._stub_train(step, sub_dir, latest_ckpt)
         else:
             stats = tools.run_train(
-                sub_dir, latest_ckpt, self.config, ROOT,
-                int(self.config["train_step_timeout_s"]))
+                sub_dir, latest_ckpt,
+                {**self.config, "_ckpt_dir": str(self.ckpt_root / f"step_{step}")},
+                ROOT, int(self.config["train_step_timeout_s"]))
         self.event(step, "train_done", action_index=action_index,
                    **(stats.get("train") or {"status": stats["status"]}))
         return stats
@@ -629,7 +666,8 @@ class Orchestrator:
         # sanity: converted rows are verl-shaped with non-empty ground truth
         assert all(isinstance(r["prompt"], list) for r in verl_rows)
         assert all(str(r["reward_model"]["ground_truth"]).strip() for r in verl_rows)
-        hf = sub_dir / "ckpt" / "global_step_1" / "actor" / "huggingface"
+        hf = (self.ckpt_root / f"step_{step}" / "global_step_1" / "actor"
+              / "huggingface")
         hf.mkdir(parents=True, exist_ok=True)
         (hf / "DRY_RUN_STUB").write_text("stub checkpoint (no weights)\n")
         (sub_dir / "train.log").write_text("[dry-run] stubbed GRPO update\n")

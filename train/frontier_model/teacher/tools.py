@@ -319,7 +319,8 @@ def run_test_evaluation(out_dir, model_path, config, repo_root, timeout_s, spec)
                      label=f"reference_test_{spec['name']}", log_name="test.log",
                      overrides={k: spec[k] for k in
                                 ("samples", "verifier", "headline_metric")
-                                if k in spec})
+                                if k in spec},
+                     num_shards=int(config.get("test_shards", 1)))
 
 
 def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
@@ -336,13 +337,20 @@ def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
 
 
 def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
-              data, label, log_name, overrides=None):
+              data, label, log_name, overrides=None, num_shards=1):
     """Shared body of every evaluation the loop runs.
 
     Decoding is `eval_base` and is the same everywhere -- a score is only a curve
     if the way it was produced does not move. `teacher_eval` supplies the rest;
     `overrides` lets one reference test carry its benchmark's own sample count,
     verifier and headline metric.
+
+    `num_shards > 1` splits the problems round-robin across that many GPUs, one
+    process each, and merges the pieces. It exists for thinking mode: 944
+    generations at 39 gen/min/GPU is 24 minutes on one card, which over 20 steps
+    is eight hours of reference testing against two of training. Sharded it is
+    three minutes. The merge recomputes every metric over the whole set, so a
+    sharded run and a single-process run of the same data agree.
 
     Pure command line: the data is written moments earlier or lives outside
     configs/, so there is no config to point at and nothing to register.
@@ -370,9 +378,17 @@ def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
         "--output-path", str(out_dir),
         *(["--headline-metric", str(tmpl["headline_metric"])]
           if tmpl.get("headline_metric") else []),
+        # Qwen's chat template takes the flag; Llama's rejects the argument, so
+        # absent has to stay distinguishable from false.
+        *(["--thinking", "true" if tmpl["enable_thinking"] else "false"]
+          if tmpl.get("enable_thinking") is not None else []),
     ]
-    rc, timed_out, wall = _stream(argv, out_dir / log_name, cwd=str(repo_root),
-                                  timeout_s=timeout_s)
+    if num_shards > 1:
+        rc, timed_out, wall = _run_sharded(argv, out_dir, log_name, repo_root,
+                                           timeout_s, num_shards)
+    else:
+        rc, timed_out, wall = _stream(argv, out_dir / log_name, cwd=str(repo_root),
+                                      timeout_s=timeout_s)
 
     summ_src = out_dir / "summary.json"
     stats = {"status": "ok" if (rc == 0 and not timed_out) else "error",
@@ -392,6 +408,45 @@ def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
         stats["eval"] = None
         stats["error"] = "evaluate.py produced no summary.json"
     return stats
+
+
+def _run_sharded(argv, out_dir, log_name, repo_root, timeout_s, num_shards):
+    """Run `argv` as N shards, one per GPU, then merge them into one summary.
+
+    All shards run concurrently and are waited on together, so the wall clock is
+    the slowest shard. A shard that fails takes the whole evaluation with it:
+    merging a partial set would produce a score over a subset of the problems
+    while looking exactly like a score over all of them.
+    """
+    t0 = time.time()
+    procs = []
+    for i in range(num_shards):
+        cmd = argv + ["--shard", str(i), "--num-shards", str(num_shards)]
+        logf = open(out_dir / f"{Path(log_name).stem}.s{i}of{num_shards}.log", "w")
+        logf.write(f"$ CUDA_VISIBLE_DEVICES={i} {' '.join(cmd)}\n\n")
+        logf.flush()
+        env = {**os.environ, "CUDA_VISIBLE_DEVICES": str(i)}
+        procs.append((subprocess.Popen(cmd, cwd=str(repo_root), env=env, stdout=logf,
+                                       stderr=subprocess.STDOUT,
+                                       stdin=subprocess.DEVNULL), logf))
+    rc, timed_out = 0, False
+    deadline = t0 + timeout_s if timeout_s else None
+    for proc, logf in procs:
+        try:
+            left = max(1, deadline - time.time()) if deadline else None
+            r = proc.wait(timeout=left)
+            rc = rc or r
+        except subprocess.TimeoutExpired:
+            proc.kill(); proc.wait()
+            rc, timed_out = rc or -9, True
+        finally:
+            logf.close()
+    if rc == 0 and not timed_out:
+        r, t, _ = _stream(["python", str(EVAL_DIR / "merge_shards.py"),
+                           "--output-path", str(out_dir)],
+                          out_dir / log_name, cwd=str(repo_root), timeout_s=600)
+        rc, timed_out = rc or r, timed_out or t
+    return rc, timed_out, time.time() - t0
 
 
 def eval_stats_from_summary(summary_path):
@@ -434,7 +489,8 @@ def run_train(step_dir, model_path, config, repo_root, timeout_s):
     train_file = step_dir / "train.verl.jsonl"
     protocol.atomic_write_jsonl(train_file, verl_rows)
 
-    ckpt_dir = step_dir / "ckpt"
+    ckpt_dir = Path(config["_ckpt_dir"]) if config.get("_ckpt_dir") \
+        else step_dir / "ckpt"
     argv = [
         "bash", str(FM_DIR / "run_teacher_step.sh"),
         str(config["grpo_config"]), str(train_file), str(model_path),

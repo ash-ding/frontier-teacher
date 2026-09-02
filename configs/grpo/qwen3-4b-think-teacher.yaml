@@ -1,4 +1,9 @@
-# The teacher-in-the-loop curriculum loop.
+# The teacher-in-the-loop curriculum loop -- Qwen3-4B, thinking ON.
+#
+# Sibling of llama32-3b-teacher.yaml. Everything about the loop is the same;
+# what changes is the student and the decoding its evaluations use, both
+# taken verbatim from configs/eval/qwen3-4b-think__*.yaml so a teacher run
+# and the no-teacher baseline are scored identically.
 #
 # This configures train/frontier_model/teacher/orchestrator.py. Every field can
 # also be given on the command line, and for each field independently the command
@@ -42,14 +47,19 @@ output_path: outputs/frontier-model   # run_<timestamp>/ is created under here
 # 15 and 20 updates - the rollout milestones the baseline curves are evaluated
 # at - so the two are comparable point for point. Keeping all 20 would be 240 GB.
 keep_checkpoint_every: 5
-test_shards: 1                # reference tests on one GPU; see the qwen3-4b-think
-                              # config for why thinking mode needs all eight
+# Thinking mode generates ~47x slower than Llama. The three reference tests are
+# 944 generations, which is 24 minutes on one card and eight hours over 20 steps
+# -- against roughly two hours of actual training. Sharded across all eight they
+# are three minutes. evaluate.py splits the problems round-robin and
+# merge_shards.py recomputes every metric over the whole set, so a sharded score
+# and a single-process score of the same data agree.
+test_shards: 8
 
 # --- student and its GRPO update -----------------------------------------------
 # The student, and the shape of every training step. run_teacher_step.sh takes
 # these as arguments rather than deriving any of them from the teacher's file.
-base_model: unsloth/Llama-3.2-3B-Instruct   # step-0 weights; matches the preset
-grpo_config: llama32-3b       # preset in run_teacher_step.sh: max response length,
+base_model: Qwen/Qwen3-4B                   # step-0 weights; matches the preset
+grpo_config: qwen3-4b-think       # preset in run_teacher_step.sh: max response length,
                               # temperature/top_p/top_k, vLLM memory fraction
 n_gpus: 8
 # G=32, TB=16, MB=8 is run_grpo.sh's sizing for its G=32 bands, verbatim. A
@@ -61,8 +71,8 @@ train_batch_size: 16          # problems per step. The curriculum must be EXACTL
                               # this many rows -- fewer or more is a protocol
                               # error, not something to pad or truncate around.
 ppo_mini_batch_size: 8        # -> 2 gradient updates over the batch
-train_step_timeout_s: 3600
-eval_step_timeout_s: 3600
+train_step_timeout_s: 10800   # a thinking step generates 512 x up to 32k tokens
+eval_step_timeout_s: 10800
 
 # --- the reference test sets ---------------------------------------------------
 # One fifth of each of the project's three benchmarks, drawn by
@@ -124,13 +134,14 @@ pipeline_source:
 # data.jsonl; these supply its settings, and they too are the same every step.
 eval_base:
   temperature: 0.6
-  top_p: 0.9
-  top_k: -1
+  top_p: 0.95
+  top_k: 20
   seed: 1234
   tensor_parallel_size: 1
   gpu_memory_utilization: 0.90
 teacher_eval:
   samples: 4            # gives pass@1 through pass@4 from one run
-  max_tokens: 4096
-  max_model_len: 8192
+  max_tokens: 30000     # a cap below what the model uses is measured as failure:
+  max_model_len: 32768  # a truncated rollout has no \boxed{} and scores 0
   verifier: symbolic    # the teacher's problems are MATH-style exact forms
+  enable_thinking: true
