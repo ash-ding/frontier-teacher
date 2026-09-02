@@ -120,11 +120,11 @@ class Orchestrator:
             max_budget_usd=float(self.config.get("teacher_max_budget_usd", 0.0)),
         )
         if not res.ok:
-            self.consecutive_failures += 1
+            # The failure counter is owned by run() so every halt (teacher-turn
+            # failure, malformed/missing file, schema violation) counts exactly once.
             raise protocol.ProtocolError(
                 f"teacher turn failed (rc={res.returncode} timed_out={res.timed_out} "
-                f"err={res.error!r}); consecutive_failures={self.consecutive_failures}")
-        self.consecutive_failures = 0
+                f"err={res.error!r})")
         return {"wallclock_s": round(res.wallclock_s, 1),
                 "input_tokens": res.input_tokens, "output_tokens": res.output_tokens,
                 "cost_usd": res.cost_usd, "num_turns": res.num_turns,
@@ -164,12 +164,13 @@ class Orchestrator:
         teacher = self.teacher_turn(step, step_dir, latest_ckpt)
         self.event(step, "teacher_turn_done", **teacher)
 
-        # (5) strict validation
-        dpath = step_dir / "decision.json"
-        if not dpath.exists():
-            raise protocol.ProtocolError(f"step {step}: teacher wrote no decision.json")
-        decision = protocol.validate_decision(json.loads(dpath.read_text()), step)["decision"]
-        rows = protocol.validate_data_rows(protocol.read_jsonl(step_dir / "data.jsonl"))
+        # (5) strict validation -- a missing file or syntactically-broken JSON
+        # halts cleanly (ProtocolError) exactly like a schema violation, rather
+        # than escaping as an uncaught FileNotFoundError/JSONDecodeError traceback.
+        decision = protocol.validate_decision(
+            protocol.read_json_strict(step_dir / "decision.json"), step)["decision"]
+        rows = protocol.validate_data_rows(
+            protocol.read_jsonl_strict(step_dir / "data.jsonl"))
         data_hash = protocol.content_hash(rows)
 
         # circuit breaker: identical (decision, data) as the immediately prior step
@@ -318,8 +319,15 @@ class Orchestrator:
                     pass  # malformed -> re-run
             try:
                 latest_ckpt, prev = self.run_step(step, latest_ckpt, prev)
+                self.consecutive_failures = 0  # a clean step resets the streak
             except protocol.ProtocolError as e:
-                self.event(step, "halt", error=str(e))
+                # Every strict-validation failure -- teacher-turn failure, missing
+                # or syntactically-broken decision.json/data.jsonl, or a schema
+                # violation -- lands here: log the halt event, count the failure,
+                # and exit cleanly (rc=1). We do NOT best-effort parse or retry.
+                self.consecutive_failures += 1
+                self.event(step, "halt", error=str(e),
+                           consecutive_failures=self.consecutive_failures)
                 self.log(f"\nHALT at step {step}: {e}")
                 if self.consecutive_failures >= abort_at:
                     self.log(f"consecutive teacher failures reached {abort_at}; aborting run")

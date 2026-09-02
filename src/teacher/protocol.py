@@ -54,6 +54,36 @@ def read_jsonl(path):
         return [json.loads(line) for line in f if line.strip()]
 
 
+def read_json_strict(path):
+    """Read+parse a JSON file, raising ProtocolError on a MISSING file or a JSON
+    syntax error -- not just a schema violation.
+
+    The teacher writes `decision.json` with `Write`; a stray comma or a partial
+    file yields a syntactically-broken document, and a missing file means the
+    teacher wrote nothing. Both must funnel into the same halt-and-log path as a
+    schema violation, never escape as an uncaught FileNotFoundError/JSONDecodeError.
+    """
+    path = Path(path)
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError as e:
+        raise ProtocolError(f"{path.name} does not exist") from e
+    except json.JSONDecodeError as e:
+        raise ProtocolError(f"{path.name} is not valid JSON: {e}") from e
+
+
+def read_jsonl_strict(path):
+    """Like read_jsonl, but a missing file or a malformed line becomes a
+    ProtocolError rather than an uncaught FileNotFoundError/JSONDecodeError."""
+    path = Path(path)
+    try:
+        return read_jsonl(path)
+    except FileNotFoundError as e:
+        raise ProtocolError(f"{path.name} does not exist") from e
+    except json.JSONDecodeError as e:
+        raise ProtocolError(f"{path.name} is not valid JSON: {e}") from e
+
+
 # --------------------------------------------------------------------- schemas
 
 def validate_decision(obj, step: int):

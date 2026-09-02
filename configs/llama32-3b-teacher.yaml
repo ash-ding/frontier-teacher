@@ -11,7 +11,12 @@ teacher_model: sonnet
 # per-turn wall-clock timeout plus the cost ceiling below (not a turn cap).
 teacher_timeout_s: 900        # kill a teacher turn that runs longer than this
 teacher_max_budget_usd: 5.0   # hard per-turn cost ceiling (--max-budget-usd)
-consecutive_failure_abort: 2  # abort the run after this many teacher-turn failures
+consecutive_failure_abort: 2  # failure-streak threshold recorded on the abort-log
+                              # line. NOTE: the loop is fail-safe and halts-and-logs
+                              # on the FIRST failure (teacher-turn failure, or a
+                              # malformed/missing/invalid decision.json/data.jsonl),
+                              # so today this acts as a first-failure halt, not a
+                              # retry budget. It never best-effort parses or retries.
 halt_on_duplicate: true       # halt if a step's (decision, data) repeats verbatim
 
 # --- run / workspace -----------------------------------------------------------
