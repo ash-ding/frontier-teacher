@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -301,3 +302,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # vLLM's shutdown intermittently hangs: the results are on disk and the GPU
+    # is idle, but the process never exits and whatever is waiting on it waits
+    # forever. It cost a teacher run 35 minutes on one evaluation, and would
+    # have cost the eval-step timeout - an hour - on every step it hit.
+    # main() has flushed and closed every output file by here, so there is
+    # nothing left for an orderly shutdown to do that we need.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)

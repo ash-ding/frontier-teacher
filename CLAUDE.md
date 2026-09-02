@@ -166,6 +166,11 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
   problems consumed half the rollouts of one where it wrote 16, and neither
   matched the baseline. A train curriculum is now exactly `train_batch_size`
   rows or the run halts.
+- **vLLM's shutdown hangs intermittently, and it looks like a slow job.** The
+  results are already written and the GPU sits at 0% while the process holds
+  75 GB and never exits; anything waiting on it waits forever. `evaluate.py`
+  therefore ends in `os._exit(0)` once its files are on disk. Kill a stuck one
+  by PID - the results it already wrote are valid and the caller picks them up.
 - **The teacher's reference test set is not the held-out set.** 100 MATH-500
   problems, evaluated after every teacher training step so the run has a curve.
   The teacher can read them — they live in the run directory it browses — so
