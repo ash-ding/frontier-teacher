@@ -47,7 +47,7 @@ BASE = re.compile(r"^(?P<cfg>[\w.-]+?)__(?P<task>math500|aime|hmmt)$")
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--outputs", default=str(ROOT / "outputs"))
-    ap.add_argument("--out", default=str(ROOT / "outputs" / "curves.json"))
+    ap.add_argument("--out", default=str(ROOT / "outputs" / "analysis" / "curves.json"))
     a = ap.parse_args()
 
     outdir = Path(a.outputs)
@@ -108,6 +108,7 @@ def main():
            "headline_metric": HEADLINE,
            "baselines": {f"{c}__{t}": v for (c, t), v in sorted(baselines.items())},
            "series": series}
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(doc, indent=2))
 
     print(f"wrote {a.out}")

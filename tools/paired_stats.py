@@ -44,7 +44,7 @@ def load(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--outputs", default=str(ROOT / "outputs"))
-    ap.add_argument("--out", default=str(ROOT / "outputs" / "paired_stats.json"))
+    ap.add_argument("--out", default=str(ROOT / "outputs" / "analysis" / "paired_stats.json"))
     ap.add_argument("--boots", type=int, default=6000)
     a = ap.parse_args()
     rnd = random.Random(20260831)
@@ -91,6 +91,8 @@ def main():
                 "p_le_zero": sum(1 for x in boots if x <= 0) / a.boots,
                 "headline": metric == HEADLINE[task],
             })
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(results, indent=1))
     sig = sum(1 for r in results if r["lo"] > 0 or r["hi"] < 0)
     print(f"wrote {a.out}  {len(results)} cell-metrics, {sig} with an interval clear of zero")

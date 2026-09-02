@@ -196,6 +196,28 @@ def main():
     if not rows:
         raise SystemExit("no problems selected")
 
+    verifier = get_verifier(R["verifier"])
+
+    from transformers import AutoTokenizer
+    from vllm import LLM, SamplingParams
+
+    tok = AutoTokenizer.from_pretrained(R["model"])
+    tkw = {} if R["enable_thinking"] is None else {"enable_thinking": R["enable_thinking"]}
+    prompts = [tok.apply_chat_template(
+        [{"role": "user", "content": PROMPT.format(problem=r["problem"])}],
+        tokenize=False, add_generation_prompt=True, **tkw) for r in rows]
+
+    llm = LLM(model=R["model"], tensor_parallel_size=R["tensor_parallel_size"],
+              gpu_memory_utilization=R["gpu_memory_utilization"],
+              max_model_len=R["max_model_len"], dtype="bfloat16", seed=R["seed"],
+              enforce_eager=False, trust_remote_code=True)
+    sp = SamplingParams(n=R["samples"], temperature=R["temperature"], top_p=R["top_p"],
+                        top_k=R["top_k"], max_tokens=R["max_tokens"], seed=R["seed"])
+
+    t0 = time.time()
+    outs = llm.generate(prompts, sp)
+    gen_s = time.time() - t0
+
     # One run, one directory, three fixed names. The caller chooses the
     # directory, which is the only thing that decides whether two runs collide -
     # a decision that used to be made by deriving a filename, where forgetting a
