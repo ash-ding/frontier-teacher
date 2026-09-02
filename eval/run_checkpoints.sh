@@ -66,7 +66,7 @@ run_one () {   # gpu step task dir
 
   CUDA_VISIBLE_DEVICES=$gpu VLLM_LOGGING_LEVEL=WARNING \
     python eval/evaluate.py --config "configs/eval/${CFG}.yaml" --task "$task" \
-      --model "$dir" --name "$tag" \
+      --weights "$dir" --name "$tag" \
       > "logs/eval__${tag}__${task}.log" 2>&1 &
   local pid=$!
   local waited=0

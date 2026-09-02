@@ -74,7 +74,7 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
       for g in $missing; do
         CUDA_VISIBLE_DEVICES=$g VLLM_LOGGING_LEVEL=WARNING \
           python eval/evaluate.py --config "configs/eval/${CFG}.yaml" --task "$task" \
-            --model "$d" --name "$tag" --shard "$g" --num-shards "$NGPU" \
+            --weights "$d" --name "$tag" --shard "$g" --num-shards "$NGPU" \
             \
             > "logs/eval__${tag}__${task}__s${g}.log" 2>&1 &
         pids+=($!)

@@ -453,7 +453,7 @@ class Orchestrator:
         """No-GPU: run the REAL converter, then fabricate a checkpoint dir."""
         rows = protocol.read_jsonl(sub_dir / "data.jsonl")[
             : int(self.config.get("train_max_problems", 16))]
-        sys.path.insert(0, str(ROOT / "src"))
+        sys.path.insert(0, str(ROOT / "eval"))
         from to_verl_teacher_dataset import convert  # noqa: E402
         verl_rows = convert(rows)
         protocol.atomic_write_jsonl(sub_dir / "train.verl.jsonl", verl_rows)

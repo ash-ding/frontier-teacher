@@ -28,7 +28,9 @@ import yaml
 from . import protocol
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
-SRC = ROOT / "src"
+# src/ split into eval/ (measurement) and train/ (learning) - this module
+# reuses the evaluation harness unmodified, so it points at eval/.
+EVAL_DIR = ROOT / "eval"
 SCRIPTS = ROOT / "scripts"
 
 
@@ -267,7 +269,7 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
     """Evaluate the current checkpoint on the teacher's data via evaluate.py.
 
     `step_dir` is this eval sub-action's own dir (step_<N>/eval_<M>/). Reuses
-    evaluate.py unmodified: `--limit 0` (uncapped), `--save-generations`,
+    evaluate.py unmodified: `--limit 0` (uncapped); generations are always saved,
     `--out step_dir`, `--name teacher_step<N>_eval<M>`. Copies the tag-named
     summary/records to the canonical eval.summary.json / eval.records.jsonl in the
     sub-action dir. Returns a dict of eval stats (weights unchanged).
@@ -280,13 +282,12 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
     tag = f"{name}__teacher_eval"
 
     argv = [
-        "python", str(SRC / "evaluate.py"),
+        "python", str(EVAL_DIR / "evaluate.py"),
         "--config", str(eval_cfg),
         "--task", "teacher_eval",
-        "--model", str(model_path),
+        "--weights", str(model_path),
         "--name", name,
         "--limit", "0",
-        "--save-generations", str(step_dir / "rollouts"),
         "--out", str(step_dir),
     ]
     rc, timed_out, wall = _stream(argv, step_dir / "eval.log", cwd=str(repo_root),
@@ -353,7 +354,7 @@ def run_train(step_dir, step, model_path, config, repo_root, timeout_s, n_gpus,
     # convert in-process (deterministic, no subprocess) so a converter error is a
     # clean ProtocolError rather than a shell exit code.
     import sys
-    sys.path.insert(0, str(SRC))
+    sys.path.insert(0, str(EVAL_DIR))
     from to_verl_teacher_dataset import convert  # noqa: E402
     verl_rows = convert(rows)
     train_file = step_dir / "train.verl.jsonl"

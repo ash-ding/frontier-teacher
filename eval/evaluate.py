@@ -22,7 +22,7 @@ Three things are deliberately not optional:
   for different tasks and only the source revealed which.
 
   python eval/evaluate.py --config configs/eval/llama32-3b.yaml --task math500
-  python eval/evaluate.py --config ... --task aime --model <ckpt> --name <tag>
+  python eval/evaluate.py --config ... --task aime --weights <ckpt-dir>
 """
 from __future__ import annotations
 
@@ -40,6 +40,31 @@ from metrics import summarize                      # noqa: E402
 from verifiers import get_verifier                 # noqa: E402
 from verifiers.extract import answer_segment       # noqa: E402
 
+# Every field's fallback lives here, in the script. A config or the command line
+# may set a field; when neither does, this is what applies. Nothing falls back
+# through the config to reach a default, because a three-level chain is exactly
+# the ambiguity that makes "why did it use 0.9?" hard to answer.
+DEFAULTS = {
+    "samples": 4,
+    "max_tokens": 4096,
+    "max_model_len": 8192,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": -1,
+    "seed": 1234,
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.90,
+    "verifier": "symbolic",       # AIME is the only benchmark that is not
+    "enable_thinking": None,      # absent, not false: Llama's template rejects it
+    "out_subdir": "",
+    "headline_metric": None,
+}
+
+# Fields a config may set. Anything here that is ALSO given on the command line
+# is an error rather than a silent precedence decision.
+CONFIG_FIELDS = set(DEFAULTS) | {"model"}
+
+
 PROMPT = ("Solve the following math problem. Reason step by step, and put your "
           "final answer within \\boxed{{}}.\n\n{problem}")
 
@@ -54,10 +79,14 @@ def build_args():
                    help="dataset JSONL(s), relative to data/ or absolute; "
                         "default: the task's own data_files")
     g.add_argument("--out", default=None, help="output directory (default: outputs/)")
-    g.add_argument("--model", default=None, help="model id or checkpoint directory")
+    g.add_argument("--weights", default=None,
+                   help="evaluate THESE weights using the config's profile - a "
+                        "checkpoint directory. Distinct from the config's `model`, "
+                        "which names the model the profile describes, so the two "
+                        "never conflict. Omit to evaluate the config's own model.")
     g.add_argument("--name", default=None,
-                   help="output tag (default: the config's name, or one derived "
-                        "from --model so a checkpoint cannot overwrite a baseline)")
+                   help="output tag. Derived from the model and the weights when "
+                        "omitted, so a checkpoint can never overwrite a baseline.")
 
     g = ap.add_argument_group("sampling - model-specific, defaults from the config")
     g.add_argument("--samples", type=int, default=None,
@@ -92,81 +121,93 @@ def resolve_name(args, cfg):
     paired comparison is measured against - with a trained checkpoint's score,
     and nothing warns you.
 
-    So a run that points --model somewhere gets a name derived from where:
+    So a run that points --weights somewhere gets a name derived from where:
 
         .local_checkpoints/llama32-3b__pass1_05-15pct/global_step_20/actor/huggingface
         -> llama32-3b__pass1_05-15pct__step20
 
-    A run without --model is evaluating the config's own model and keeps the
+    A run without --weights is evaluating the config's own model and keeps the
     config's name, which is what the baselines are called.
     """
     if args.name:
         return args.name
-    if not args.model:
+    if not args.weights:
         return cfg["name"]
 
-    parts = Path(args.model).resolve().parts
+    parts = Path(args.weights).resolve().parts
     step = next((p for p in reversed(parts) if p.startswith("global_step_")), None)
     if step:
         exp = parts[parts.index(step) - 1]
         return f"{exp}__step{step.rsplit('_', 1)[1]}"
     # Some other directory of weights: fall back to its own name, which at least
     # cannot collide with a baseline.
-    return f"{cfg['name']}__{Path(args.model).name}"
+    return f"{cfg['name']}__{Path(args.weights).name}"
 
 
 def resolve(args):
-    """Config supplies defaults; the command line wins. Returns one flat dict."""
-    cfg = yaml.safe_load(open(args.config))
-    if args.task not in cfg.get("tasks", {}):
+    """Merge script defaults, the config, and the command line into one dict.
+
+    Config and command line are two ways of saying the same thing, not layers:
+    a field set in both is an error, not a precedence decision. That rules out
+    the class of surprise where a config value is quietly ignored because some
+    orchestration script also passed the flag - which is how a run ends up
+    sampling at a temperature nobody chose.
+
+    The one pair that looks like a conflict and is not: the config's `model`
+    names the model whose profile this is, and --weights points at weights to
+    evaluate with that profile. Different questions, different fields.
+    """
+    cfg = yaml.safe_load(open(args.config)) if args.config else {}
+    if args.config and args.task not in cfg.get("tasks", {}):
         raise SystemExit(f"task {args.task!r} not in {args.config}; "
                          f"have {sorted(cfg.get('tasks', {}))}")
-    task = cfg["tasks"][args.task]
+    task = cfg.get("tasks", {}).get(args.task, {})
 
-    def pick(what, cli, *chain, default=None):
-        """First value that is set: command line, then config, then default."""
-        for v in (cli, *chain):
-            if v is not None:
-                return v
-        if default is not None:
-            return default
-        raise SystemExit(
-            f"{what!r} is not set. Give it on the command line (--{what.replace('_','-')}) "
-            f"or under the task/model in {args.config}.")
-
-    r = {
-        "model": pick("model", args.model, cfg.get("model")),
-        "name": resolve_name(args, cfg),
-        "task": args.task,
-        "samples": int(pick("samples", args.samples, task.get("n"))),
-        "max_tokens": int(pick("max_tokens", args.max_tokens, task.get("max_tokens"), cfg.get("max_tokens"))),
-        "max_model_len": int(pick("max_model_len", args.max_model_len, task.get("max_model_len"),
-                                  cfg.get("max_model_len"))),
-        "temperature": float(pick("temperature", args.temperature, cfg.get("temperature"))),
-        "top_p": float(pick("top_p", args.top_p, cfg.get("top_p"))),
-        "top_k": int(pick("top_k", args.top_k, cfg.get("top_k"), default=-1)),
-        "seed": cfg.get("seed", 1234),
-        "tensor_parallel_size": cfg.get("tensor_parallel_size", 1),
-        "gpu_memory_utilization": float(pick("gpu_memory_utilization", args.gpu_memory_utilization,
-                                             cfg.get("gpu_memory_utilization"), default=0.90)),
-        "verifier": pick("verifier", args.verifier, task.get("verifier")),
-        "out_subdir": task.get("out_subdir", ""),
-        "headline_metric": task.get("headline_metric"),
+    cli = {
+        "samples": args.samples, "max_tokens": args.max_tokens,
+        "max_model_len": args.max_model_len, "temperature": args.temperature,
+        "top_p": args.top_p, "top_k": args.top_k,
+        "gpu_memory_utilization": args.gpu_memory_utilization,
+        "verifier": args.verifier,
+        "enable_thinking": None if args.thinking is None else args.thinking == "true",
     }
+    cli = {k: v for k, v in cli.items() if v is not None}
 
-    # enable_thinking is Qwen3-only. Passing it to a template that does not take
-    # it raises; omitting it for Qwen3 silently picks the template's default,
-    # which is not the same as choosing. So it is tri-state: absent means the
-    # model has no such mode.
-    th = args.thinking if args.thinking is not None else cfg.get("enable_thinking")
-    r["enable_thinking"] = None if th is None else (
-        th if isinstance(th, bool) else th == "true")
+    # A task's settings are part of the config, so a task-level `n` collides
+    # with --samples exactly as a top-level one would.
+    from_cfg = {k: v for k, v in {**cfg, **task}.items()
+                if k in CONFIG_FIELDS and k != "model"}
+    if task.get("n") is not None:
+        from_cfg["samples"] = task["n"]
 
-    names = args.data or task.get("data_files") or [task.get("data_file", "")]
-    if not names or not names[0]:
-        raise SystemExit(f"task {args.task!r} declares no data_file(s) and --data was not given")
-    r["data_files"] = [Path(n) if Path(n).is_absolute() else ROOT / "data" / n for n in names]
-    return r
+    clash = sorted(set(cli) & set(from_cfg))
+    if clash:
+        raise SystemExit(
+            "these are set in both " + args.config + " and on the command line: "
+            + ", ".join(clash) + ".\nPick one. Config and command line are two "
+            "ways to specify a run, not a precedence chain.")
+
+    R = {**DEFAULTS, **from_cfg, **cli}
+    R["task"] = args.task
+    R["model"] = args.weights or cfg.get("model")
+    if not R["model"]:
+        raise SystemExit("no model: give --weights, or set `model:` in the config.")
+    R["name"] = resolve_name(args, cfg)
+    R["profile_model"] = cfg.get("model")
+    for k in ("samples", "max_tokens", "max_model_len", "top_k", "seed",
+              "tensor_parallel_size"):
+        R[k] = int(R[k])
+    for k in ("temperature", "top_p", "gpu_memory_utilization"):
+        R[k] = float(R[k])
+
+    names = args.data or task.get("data_files") or ([task["data_file"]]
+                                                    if task.get("data_file") else [])
+    if not names:
+        raise SystemExit(f"no dataset: give --data, or declare data_files under "
+                         f"task {args.task!r} in the config.")
+    R["data_files"] = [Path(n) if Path(n).is_absolute() else ROOT / "data" / n
+                       for n in names]
+    return R
 
 
 def main():
@@ -236,7 +277,7 @@ def main():
                             "samples": per_sample})
 
     summary = summarize(records, extra={
-        "tag": tag, "task": R["task"], "model": R["model"], "config": R["name"],
+        "tag": tag, "task": R["task"], "model": R["model"], "profile": R["profile_model"], "config": R["name"],
         "verifier": R["verifier"], "gen_seconds": gen_s,
         "sampling": {k: R[k] for k in ("temperature", "top_p", "top_k",
                                        "max_tokens", "seed")} |
