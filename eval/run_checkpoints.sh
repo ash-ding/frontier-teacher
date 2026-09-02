@@ -59,7 +59,7 @@ wait_gpus_free () {
 
 run_job () {   # gpu step task ckpt-dir
   local gpu=$1 step=$2 task=$3 dir=$4
-  local od="outputs/grpo/${EXP}__step${step}__${task}"
+  local od="${OUTROOT}/${EXP}__step${step}__${task}"
   [ -f "$od/summary.json" ] && { echo "  skip (done) step $step / $task"; return 0; }
 
   CUDA_VISIBLE_DEVICES=$gpu VLLM_LOGGING_LEVEL=WARNING \
