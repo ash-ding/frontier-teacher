@@ -22,19 +22,36 @@ train, the run HALTS cleanly (descriptive halt event, rc=1) -- we never fabricat
 a train. All evaluations within a step run on the SAME checkpoint (the one the
 previous step's train produced; step 0 = base model).
 
-Workspace per step:
+Everything the run produces lives under one directory:
 
-    step_<N>/
-      config.json                 resolved config snapshot (written at step start)
-      eval_<M>/                    one per evaluation sub-action (M = 0,1,...)
-        decision.json data.jsonl teacher.log
-        summary.json records.jsonl generations.jsonl eval.log
-      train/                       the terminating train sub-action
-        decision.json data.jsonl teacher.log
-        train.verl.jsonl train.log ckpt/.../huggingface
-      result.json                 STEP SUMMARY (written when the step closes on train):
-                                  {step, n_evals, evals:[...], train:{...},
-                                   latest_checkpoint_hf_path}
+    run_<timestamp>/
+      pipeline/                   THE FROZEN SETUP, written once at run start
+        config.resolved.json      every setting: student, training_step,
+                                  evaluation, loop
+        manifest.json             which source files were copied, and from where
+        eval/..., train/...       copies of the code that runs the decisions, at
+                                  their repo-relative paths
+      reference.jsonl             --reference-data, if given
+      events.jsonl metrics.jsonl run_state.json
+      step_<N>/
+        config.json               resolved settings + the checkpoint this step
+                                  started from
+        eval_<M>/                 one per evaluation sub-action (M = 0,1,...)
+          decision.json data.jsonl teacher.log
+          summary.json records.jsonl generations.jsonl eval.log
+        train/                    the terminating train sub-action
+          decision.json data.jsonl teacher.log
+          train.verl.jsonl train.log ckpt/.../huggingface
+        result.json               STEP SUMMARY (written when the step closes on
+                                  train): {step, n_evals, evals:[...], train:{...},
+                                  latest_checkpoint_hf_path}
+
+The teacher's ONLY interface to the student is the data it writes. The student,
+the group size, the batch size, the sampling parameters and the GPU count are
+settled from the config when the run starts and are identical on every step -
+that is what makes a teacher run comparable to the no-teacher GRPO baseline. A
+train curriculum must therefore be exactly `train_batch_size` problems; a
+different count is a protocol error, not something to pad or truncate around.
 
 Entry point:  python train/frontier_model/teacher/orchestrator.py --config <cfg>
               [--steps N] [--max-evals-per-step K] [--output-path DIR]
@@ -91,13 +108,17 @@ class Orchestrator:
         "base_model": "unsloth/Llama-3.2-3B-Instruct",
         "grpo_config": "llama32-3b",
         "n_gpus": 8,
-        "train_max_problems": 16,
+        "group_size": 32,
+        "train_batch_size": 16,
+        "ppo_mini_batch_size": 8,
         "train_step_timeout_s": 3600,
         "eval_step_timeout_s": 3600,
         "halt_on_duplicate": True,
         "consecutive_failure_abort": 2,
-        "read_only_paths": [],
+        "pipeline_source": [],
         "reference_data": None,
+        "eval_base": {},
+        "teacher_eval": {},
     }
 
     def __init__(self, config_path, dry_run, steps=None, max_evals_per_step=None,
@@ -142,6 +163,60 @@ class Orchestrator:
         self.base_model = self.config["base_model"]
         self.consecutive_failures = 0
 
+        # The training shape is settled here, once, and never varies by step or by
+        # what the teacher writes. Checked now rather than at the first train, so a
+        # misconfigured run fails in the first second instead of an hour in.
+        self.group_size = int(self.config["group_size"])
+        self.train_batch_size = int(self.config["train_batch_size"])
+        self.mini_batch_size = int(self.config["ppo_mini_batch_size"])
+        n_gpus = int(self.config["n_gpus"])
+        if self.train_batch_size % self.mini_batch_size:
+            raise SystemExit(f"train_batch_size {self.train_batch_size} is not "
+                             f"divisible by ppo_mini_batch_size {self.mini_batch_size}")
+        if (self.train_batch_size * self.group_size) % n_gpus:
+            raise SystemExit(
+                f"train_batch_size * group_size "
+                f"({self.train_batch_size * self.group_size}) is not divisible by "
+                f"n_gpus {n_gpus}; verl requires this")
+
+        # What will run the teacher's decisions, copied in so the teacher reads the
+        # code that will actually execute rather than a description of it.
+        self.pipeline_dir = tools.snapshot_pipeline(
+            self.run_dir, ROOT, self.config, self.resolved_settings())
+
+    def resolved_settings(self):
+        """Every setting this run is pinned to, flat and JSON-safe.
+
+        Written to pipeline/config.resolved.json and quoted back in each step's
+        config.json. The teacher reads it: it is the difference between knowing
+        the pipeline and guessing at it.
+        """
+        c = self.config
+        return {
+            "student": {
+                "base_model": c["base_model"],
+                "grpo_preset": c["grpo_config"],
+                "n_gpus": int(c["n_gpus"]),
+            },
+            "training_step": {
+                "group_size": self.group_size,
+                "train_batch_size": self.train_batch_size,
+                "ppo_mini_batch_size": self.mini_batch_size,
+                "rollouts_per_step": self.train_batch_size * self.group_size,
+                "gradient_updates_per_step": self.train_batch_size // self.mini_batch_size,
+                "timeout_s": int(c["train_step_timeout_s"]),
+            },
+            "evaluation": {**dict(c["eval_base"]), **dict(c["teacher_eval"]),
+                           "timeout_s": int(c["eval_step_timeout_s"])},
+            "loop": {
+                "steps": self.steps,
+                "max_evals_per_step": self.max_evals_per_step,
+                "halt_on_duplicate": bool(c["halt_on_duplicate"]),
+                "teacher_model": c["teacher_model"],
+                "teacher_timeout_s": int(c["teacher_timeout_s"]),
+            },
+        }
+
     # ------------------------------------------------------------- bookkeeping
     def log(self, *a):
         print(*a, flush=True)
@@ -185,12 +260,10 @@ class Orchestrator:
         """Resolved config snapshot, written once at step start (guards drift)."""
         snapshot = {
             "step": step, "run": self.run_dir.name, "ts": _now(),
-            "latest_checkpoint_hf_path": latest_ckpt, "base_model": self.base_model,
-            "teacher_model": self.config["teacher_model"],
-            "G": 32, "TB": self.config["train_max_problems"],
-            "max_evals_per_step": self.max_evals_per_step,
+            "latest_checkpoint_hf_path": latest_ckpt,
             "dry_run": self.dry_run,
             "teacher_prompt_sha256": protocol.content_hash([self.system_prompt]),
+            **self.resolved_settings(),
         }
         protocol.atomic_write_json(step_dir / "config.json", snapshot)
 
@@ -211,7 +284,8 @@ class Orchestrator:
             self.run_dir, step, self.config, latest_ckpt, ROOT,
             cwd=staging, action_index=action_index, current_step_evals=evals,
             max_evals_per_step=self.max_evals_per_step,
-            reference_file=self.reference_file)
+            reference_file=self.reference_file,
+            pipeline_dir=self.pipeline_dir)
         (staging / "task_context.txt").write_text(context)
 
         self.event(step, "teacher_turn_start", action_index=action_index)
@@ -226,6 +300,8 @@ class Orchestrator:
             protocol.read_json_strict(staging / "decision.json"), step)["decision"]
         rows = protocol.validate_data_rows(
             protocol.read_jsonl_strict(staging / "data.jsonl"))
+        if decision == "train":
+            protocol.validate_train_batch(rows, self.train_batch_size)
 
         target = (step_dir / f"eval_{action_index}") if decision == "evaluation" \
             else (step_dir / "train")
@@ -269,13 +345,15 @@ class Orchestrator:
 
         The data's ids embed step AND action_index, so two consecutive evaluations
         in a step carry DIFFERENT data and never trip the duplicate circuit breaker.
+        A train curriculum is exactly train_batch_size rows, because that is what
+        the real protocol requires -- a dry run that skipped the batch-size rule
+        would not be testing the protocol.
         """
         decision = self._canned_decision(step, action_index)
-        probs = [
-            {"id": f"dry-{step}-{action_index}-0", "problem": "What is 2 + 2?", "answer": "4"},
-            {"id": f"dry-{step}-{action_index}-1", "problem": "Compute 3 * 7.", "answer": "21"},
-            {"id": f"dry-{step}-{action_index}-2", "problem": "What is 10 - 6?", "answer": "4"},
-        ]
+        n = self.train_batch_size if decision == "train" else 3
+        probs = [{"id": f"dry-{step}-{action_index}-{i}",
+                  "problem": f"What is {i} + {i}?", "answer": str(2 * i)}
+                 for i in range(n)]
         protocol.atomic_write_json(staging / "decision.json",
                                    {"step": step, "decision": decision})
         protocol.atomic_write_jsonl(staging / "data.jsonl", probs)
@@ -343,7 +421,7 @@ class Orchestrator:
                        decision=decision, n_rows=len(rows))
 
             if not self.dry_run:  # discard any teacher edit to read-only source
-                tools.rematerialize_ro(ROOT, self.config["read_only_paths"], log=self.log)
+                tools.rematerialize_ro(ROOT, self.config["pipeline_source"], log=self.log)
 
             if decision == "evaluation":
                 if len(evals) >= self.max_evals_per_step:
@@ -439,8 +517,6 @@ class Orchestrator:
         metrics = tools._parse_verl_metrics(train_dir / "train.log")
         train_stats = {
             "n_problems": len(rows),
-            "truncated_extra_rows": max(0, len(rows) - int(
-                self.config["train_max_problems"])),
             "truncation_rate": metrics.get("response_length/clip_ratio"),
             "no_answer_rate": None,
             "metrics": metrics or None,
@@ -469,10 +545,8 @@ class Orchestrator:
             stats = self._stub_train(step, sub_dir, latest_ckpt)
         else:
             stats = tools.run_train(
-                sub_dir, step, latest_ckpt, self.config, ROOT,
-                int(self.config["train_step_timeout_s"]),
-                int(self.config["n_gpus"]),
-                int(self.config["train_max_problems"]))
+                sub_dir, latest_ckpt, self.config, ROOT,
+                int(self.config["train_step_timeout_s"]))
         self.event(step, "train_done", action_index=action_index,
                    **(stats.get("train") or {"status": stats["status"]}))
         return stats
@@ -496,8 +570,7 @@ class Orchestrator:
 
     def _stub_train(self, step, sub_dir, latest_ckpt):
         """No-GPU: run the REAL converter, then fabricate a checkpoint dir."""
-        rows = protocol.read_jsonl(sub_dir / "data.jsonl")[
-            : int(self.config["train_max_problems"])]
+        rows = protocol.read_jsonl(sub_dir / "data.jsonl")
         verl_rows = tools.teacher_convert(rows)
         protocol.atomic_write_jsonl(sub_dir / "train.verl.jsonl", verl_rows)
         # sanity: converted rows are verl-shaped with non-empty ground truth
@@ -508,7 +581,8 @@ class Orchestrator:
         (hf / "DRY_RUN_STUB").write_text("stub checkpoint (no weights)\n")
         (sub_dir / "train.log").write_text("[dry-run] stubbed GRPO update\n")
         return {"status": "ok", "action_wallclock_s": 0.0,
-                "train": {"n_problems": len(rows), "truncated_extra_rows": 0,
+                "train": {"n_problems": len(rows),
+                          "rollouts": len(rows) * self.group_size,
                           "truncation_rate": None, "no_answer_rate": None,
                           "metrics": {"dry_run": 1.0}, "deleted_shards": 0},
                 "new_checkpoint": str(hf)}

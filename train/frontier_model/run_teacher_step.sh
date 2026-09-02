@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 # One GRPO update for the observational teacher loop.
 #
-#   train/frontier_model/run_teacher_step.sh <config-name> <train_file> <model_path> <ckpt_dir> [n_gpus]
+#   train/frontier_model/run_teacher_step.sh <config-name> <train_file> \
+#       <model_path> <ckpt_dir> <n_gpus> <group_size> <train_batch> <mini_batch>
 #
 # Sibling of run_grpo.sh, kept separate so that validated script stays untouched.
-# It reuses run_grpo.sh's llama32-3b preset values VERBATIM (MODEL default,
-# MAXRESP/TEMP/TOPP/TOPK/MEMUTIL, the <=16k micro-batch branch, and the extreme-
-# band G=32/TB=16/MB=8 group sizing that gives 512 rollouts) and the same
-# main_ppo invocation. Only the loop-specific knobs differ:
+# It reuses run_grpo.sh's presets VERBATIM (MODEL default, MAXRESP/TEMP/TOPP/
+# TOPK/MEMUTIL, the <=16k micro-batch branch) and the same main_ppo invocation.
+#
+# The group size and both batch sizes are ARGUMENTS, fixed by the loop's config at
+# launch and identical on every step. They used to be derived from the train file
+# (TB = however many problems the teacher wrote), which handed the teacher control
+# of the training configuration: a step with 8 problems consumed half the rollouts
+# of a step with 16, and neither matched the baseline it is compared against. The
+# teacher's interface is the DATA; the configuration is not part of it.
+#
+# Only the loop-specific knobs differ from run_grpo.sh:
 #   * data.train_files / data.val_files -> this step's teacher-authored verl file
 #   * actor_rollout_ref.model.path      -> base model (step 0) or the prior hf ckpt
 #   * trainer.resume_mode=disable       -> weights come from model.path, not a saved
@@ -23,11 +31,14 @@ REPO="$PWD"
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate frontier-teacher
 
-CFG="${1:?usage: run_teacher_step.sh <config-name> <train_file> <model_path> <ckpt_dir> [n_gpus]}"
+CFG="${1:?usage: run_teacher_step.sh <config-name> <train_file> <model_path> <ckpt_dir> <n_gpus> <group_size> <train_batch> <mini_batch>}"
 TRAIN="${2:?missing <train_file>}"
 MODEL_PATH="${3:?missing <model_path>}"
 CKPT="${4:?missing <ckpt_dir>}"
-NGPU="${5:-8}"
+NGPU="${5:?missing <n_gpus>}"
+G="${6:?missing <group_size>}"
+TB="${7:?missing <train_batch>}"
+MB="${8:?missing <mini_batch>}"
 
 # --- llama32-3b preset, copied verbatim from run_grpo.sh -----------------------
 case "$CFG" in
@@ -53,23 +64,17 @@ else
   )
 fi
 
-# Teacher train steps use the extreme-band sizing: G=32 rollouts/problem. TB is the
-# whole authored set (the teacher may write fewer than 16) so exactly one optimizer
-# step covers every problem -> G*TB rollouts, one update. verl requires
-# train_batch_size <= dataset size, so TB tracks N rather than a fixed 16.
-G=32
 # --- end verbatim preset -------------------------------------------------------
 
 [ -f "$TRAIN" ] || { echo "missing train file $TRAIN"; exit 1; }
 N=$(wc -l < "$TRAIN")
-[ "$N" -ge 1 ] || { echo "empty train file $TRAIN"; exit 1; }
-# mini_batch == train_batch: one full-batch gradient update over all N problems.
-# verl requires train_batch_size % ppo_mini_batch_size == 0, and N is arbitrary
-# (the teacher chooses how many problems to author), so equal sizing is the only
-# choice that is always divisible -- and it is exactly the "one update on the
-# batch" this loop wants.
-TB=$N
-MB=$N
+# verl requires train_batch_size <= dataset size. The orchestrator already rejects
+# a curriculum that is not exactly TB rows; this is the second line of defence,
+# because what it prevents is a step that silently trains at a different batch
+# size than every other step and than the baseline it is compared against.
+[ "$N" -eq "$TB" ] || { echo "train file has $N problems, expected exactly $TB"; exit 1; }
+[ $((TB % MB)) -eq 0 ] || { echo "train_batch $TB not divisible by mini_batch $MB"; exit 1; }
+[ $((TB * G % NGPU)) -eq 0 ] || { echo "train_batch*group ($((TB*G))) not divisible by n_gpus $NGPU"; exit 1; }
 # hydra writes its run dir relative to cwd, which is the repo root -- where
 # outputs/ is now a symlink to the shared bucket. Left alone, every launch drops
 # an outputs/<date>/<time>/ of hydra config beside the results, on the disk all
@@ -78,7 +83,7 @@ mkdir -p "$CKPT" logs
 
 echo "=== teacher step ==="
 echo "  model_path=$MODEL_PATH  train=$TRAIN  problems=$N"
-echo "  G=$G  train_batch=$TB  mini_batch=$MB  -> $((TB*G)) rollouts, 1 update"
+echo "  G=$G  train_batch=$TB  mini_batch=$MB  -> $((TB*G)) rollouts, $((TB/MB)) update(s)"
 echo "  max_response=$MAXRESP  gpus=$NGPU  vllm_util=$MEMUTIL  ckpt=$CKPT"
 
 python -m verl.trainer.main_ppo \
@@ -121,4 +126,4 @@ python -m verl.trainer.main_ppo \
   trainer.experiment_name="teacher_step" \
   trainer.default_local_dir="$CKPT" \
   ${THINK:+ +data.apply_chat_template_kwargs.enable_thinking=$THINK} \
-  "${@:6}"
+  "${@:9}"   # anything after the fixed arguments is a hydra override

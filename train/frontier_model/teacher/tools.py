@@ -34,6 +34,42 @@ EVAL_DIR = ROOT / "eval"
 FM_DIR = ROOT / "train" / "frontier_model"   # the converter and run_teacher_step.sh
 
 
+def snapshot_pipeline(run_dir, repo_root, config, resolved):
+    """Copy the run's frozen configuration and the code it will run into
+    <run_dir>/pipeline/, and return that directory.
+
+    The teacher is asked to design a curriculum for a specific student under a
+    specific training and evaluation setup. Describing that setup in a prompt
+    invites the description and the code to drift apart; copying the code in
+    cannot. The copy is also part of the run's record - months later, "what
+    exactly ran" is answerable from the run directory alone.
+
+    Source files keep their repo-relative paths under pipeline/, so which file is
+    which is obvious without a manifest. These are copies: an edit to one changes
+    nothing, and the originals are separately restored from git before every
+    action.
+    """
+    run_dir, repo_root = Path(run_dir), Path(repo_root)
+    pdir = run_dir / "pipeline"
+    pdir.mkdir(parents=True, exist_ok=True)
+    protocol.atomic_write_json(pdir / "config.resolved.json", resolved)
+
+    copied = []
+    for rel in config["pipeline_source"]:
+        src = repo_root / rel
+        if not src.is_file():
+            raise SystemExit(f"pipeline_source: {src} does not exist")
+        dst = pdir / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        copied.append(rel)
+    protocol.atomic_write_json(pdir / "manifest.json", {
+        "copied_from": str(repo_root), "files": copied,
+        "note": "read-only copies; editing them changes nothing",
+    })
+    return pdir
+
+
 def teacher_convert(rows):
     """The teacher-data converter, loaded by path rather than by module name.
 
@@ -113,81 +149,62 @@ def _current_step_evals_summary(evals):
 
 def render_context(run_dir, step, config, latest_ckpt, repo_root, *,
                    cwd, action_index=0, current_step_evals=None,
-                   max_evals_per_step=10, reference_file=None):
-    """Build the teacher's per-sub-action task message (a plain string).
+                   max_evals_per_step=10, reference_file=None, pipeline_dir=None):
+    """Build the teacher's per-turn task message (a plain string).
 
-    A step is an inner loop of sub-actions (evaluate* then train). This message is
-    rendered once per sub-action and mounts, by absolute path so the teacher can
-    Read/cat/grep them:
-      * the curated reference training data (comparison point, context only),
-      * the verifier + training/eval source (read-only),
-      * the FULL trajectory of every CLOSED prior step (each step's evals + train),
-      * the sub-actions ALREADY taken WITHIN THE CURRENT step (so the teacher can
-        decide evaluate-again vs. train).
-    Imposes no curriculum strategy -- the standing role/protocol lives in the
-    system prompt; this message only supplies the step, the paths, and the eval cap.
+    The standing explanation - what the loop is, what the run directory holds,
+    what to write - lives in the system prompt, which does not change between
+    turns. This message carries only what does change: which step and sub-action
+    this is, how many evaluations remain, which checkpoint is current, and where
+    the trajectory so far can be read.
     """
     run_dir = Path(run_dir).resolve()
     cwd = Path(cwd).resolve()
     current_step_evals = current_step_evals or []
-    ro = [str((repo_root / p).resolve()) for p in config["read_only_paths"]]
     remaining = max_evals_per_step - len(current_step_evals)
+    tb = int(config["train_batch_size"])
 
-    prior_paths = []
-    for k in range(step):
-        sd = run_dir / f"step_{k}"
-        if sd.exists():
-            prior_paths.append(str(sd) + "/   (browse: result.json, eval_*/ , train/)")
-    # sub-action dirs of the CURRENT step already on disk
+    prior = [str(run_dir / f"step_{k}") for k in range(step)
+             if (run_dir / f"step_{k}").exists()]
     cur_dir = run_dir / f"step_{step}"
-    cur_paths = []
-    if cur_dir.exists():
-        for e in current_step_evals:
-            ed = cur_dir / f"eval_{e.get('action_index')}"
-            if ed.exists():
-                cur_paths.append(str(ed) + "/   (decision.json, data.jsonl, "
-                                 "summary.json, records.jsonl, generations.jsonl, eval.log)")
+    cur = [str(cur_dir / f"eval_{e.get('action_index')}")
+           for e in current_step_evals
+           if (cur_dir / f"eval_{e.get('action_index')}").exists()]
 
     msg = [
-        f"You are on STEP {step} of the curriculum loop. One step is ONE training",
-        "update: you may evaluate the current checkpoint any number of times (up to",
-        "the cap below), and the step CLOSES only when you choose to train.",
+        f"STEP {step}, sub-action {action_index}.",
         "",
-        f"Within THIS step you have already evaluated {len(current_step_evals)} time(s). "
-        f"You may evaluate at most {max_evals_per_step} time(s) per step; "
-        f"{max(remaining, 0)} evaluation(s) remain before you MUST train.",
+        f"The student's current checkpoint:\n  {latest_ckpt}",
+        "Every evaluation in this step measures these same weights. Only a train",
+        "advances them.",
         "",
-        "Make ONE decision (evaluation | train) for this turn and write your two",
-        f"files into your current working directory ({cwd}):",
-        "  - decision.json",
-        "  - data.jsonl",
-        f'Use step number {step} in decision.json: {{"step": {step}, "decision": "..."}}',
+        f"You have evaluated {len(current_step_evals)} time(s) in this step. "
+        f"{max(remaining, 0)} of {max_evals_per_step} remain before this step must",
+        "train.",
         "",
-        "The student's current checkpoint (what an evaluation measures, and what a",
-        f"train step would update) is:\n  {latest_ckpt}",
-        "All evaluations within this step run on THIS same checkpoint; only a train",
-        "advances it.",
-        "",
-        *(["READ-ONLY reference data, copied into this run so that what you read",
-           "is part of its record. Context only:",
-           f"  {reference_file}", ""] if reference_file else []),
-        "READ-ONLY project source (the verifier and the training/eval code that",
-        "will run your decision). Context only -- any edit is discarded:",
-        *[f"  {p}" for p in ro],
-        "",
-        "The FULL trajectory of every CLOSED prior step (evals + terminating train):",
-        _trajectory_summary(run_dir, step),
-        "",
-        "Evaluations you have ALREADY run within the CURRENT (open) step:",
+        "Results so far in THIS step:",
         _current_step_evals_summary(current_step_evals),
         "",
-        "Prior-step directories you may open directly:",
-        *([f"  {p}" for p in prior_paths] or ["  (none yet)"]),
+        "Every closed step before this one:",
+        _trajectory_summary(run_dir, step),
         "",
-        "Current-step evaluation directories you may open directly:",
-        *([f"  {p}" for p in cur_paths] or ["  (none yet)"]),
+        "Directories you can open:",
+        f"  {run_dir}/",
+        "      this run",
+        *([f"  {pipeline_dir}/",
+           "      the frozen config, and the code that runs your decisions"]
+          if pipeline_dir else []),
+        *([f"  {reference_file}",
+           "      reference data, copied in for you to read"]
+          if reference_file else []),
+        *[f"  {p}/" for p in prior],
+        *[f"  {p}/" for p in cur],
         "",
-        "Now write decision.json and data.jsonl, then stop.",
+        f"Now write decision.json and data.jsonl into {cwd}, then stop.",
+        f'  decision.json: {{"step": {step}, "decision": "evaluation"}} or '
+        f'{{"step": {step}, "decision": "train"}}',
+        f"  data.jsonl:    any number of problems for an evaluation; for a train, "
+        f"EXACTLY train_batch_size = {tb} problems.",
     ]
     return "\n".join(msg)
 
@@ -320,21 +337,20 @@ def eval_stats_from_summary(summary_path):
 
 # ----------------------------------------------------------------------- train
 
-def run_train(step_dir, step, model_path, config, repo_root, timeout_s, n_gpus,
-              max_problems=16):
-    """One real GRPO update on the teacher's problems.
+def run_train(step_dir, model_path, config, repo_root, timeout_s):
+    """One real GRPO update on the teacher's curriculum.
 
-    Truncate data.jsonl to the first `max_problems` rows -> convert via
-    train/frontier_model/to_verl_dataset.py (teacher answer -> ground_truth, NO
-    verification) ->
-    run_teacher_step.sh for one optimizer step on the latest checkpoint. Saves the
-    hf checkpoint, deletes the FSDP world-size shards, and returns the advanced
-    checkpoint path.
+    Convert data.jsonl via train/frontier_model/to_verl_dataset.py (the teacher's
+    answer becomes ground_truth, with no verification) -> run_teacher_step.sh for
+    one optimizer step on the latest checkpoint. Saves the hf checkpoint, deletes
+    the FSDP world-size shards, and returns the advanced checkpoint path.
+
+    The group size, batch size and mini-batch come from the config and are passed
+    as arguments; the curriculum's length does not influence them. The row count
+    was validated as exactly train_batch_size before this was called.
     """
     step_dir = Path(step_dir)
     rows = protocol.read_jsonl(step_dir / "data.jsonl")
-    truncated_extra = max(0, len(rows) - max_problems)
-    rows = rows[:max_problems]
 
     # convert in-process (deterministic, no subprocess) so a converter error is a
     # clean ProtocolError rather than a shell exit code.
@@ -345,8 +361,9 @@ def run_train(step_dir, step, model_path, config, repo_root, timeout_s, n_gpus,
     ckpt_dir = step_dir / "ckpt"
     argv = [
         "bash", str(FM_DIR / "run_teacher_step.sh"),
-        config.get("grpo_config", "llama32-3b"),
-        str(train_file), str(model_path), str(ckpt_dir), str(n_gpus),
+        str(config["grpo_config"]), str(train_file), str(model_path),
+        str(ckpt_dir), str(config["n_gpus"]), str(config["group_size"]),
+        str(config["train_batch_size"]), str(config["ppo_mini_batch_size"]),
     ]
     rc, timed_out, wall = _stream(argv, step_dir / "train.log", cwd=str(repo_root),
                                   timeout_s=timeout_s)
@@ -371,7 +388,7 @@ def run_train(step_dir, step, model_path, config, repo_root, timeout_s, n_gpus,
         "action_wallclock_s": round(wall, 1), "returncode": rc, "timed_out": timed_out,
         "train": {
             "n_problems": len(rows),
-            "truncated_extra_rows": truncated_extra,
+            "rollouts": len(rows) * int(config["group_size"]),
             # verl's clip_ratio is the fraction of rollouts that hit max length
             # (truncated). no_answer is not separable from the train reward, so we
             # report it only when eval measures it -- never fabricate it here.

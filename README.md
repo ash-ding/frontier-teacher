@@ -166,6 +166,19 @@ checkpoint any number of times; the step closes only when it chooses to train,
 and reaching `max_evals_per_step` without training halts the run rather than
 fabricating one. Everything lands in `<output-path>/run_<timestamp>/`.
 
+**The teacher's only interface to the student is data.** The student, the group
+size, the batch size, the sampling parameters and the GPU count are settled from
+the config when the run starts and are identical on every step — that is what
+makes a teacher run comparable to the GRPO baseline, which differs from it in
+the problems and in nothing else. A training curriculum must therefore be
+exactly `train_batch_size` problems; a different count halts the run rather than
+being padded or truncated. Evaluations may be any size.
+
+The run's frozen configuration and copies of the code that executes its
+decisions are written to `<run>/pipeline/` at startup, so the teacher reads what
+will actually run, and "what exactly ran" is answerable from the run directory
+months later.
+
 Settings resolve the same way evaluation's do — command line, then the config
 file, then the script's default — so `--steps`, `--max-evals-per-step`,
 `--output-path` and `--reference-data` each override the config field of the

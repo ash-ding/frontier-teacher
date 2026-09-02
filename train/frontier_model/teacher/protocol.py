@@ -15,6 +15,12 @@ from pathlib import Path
 
 VALID_DECISIONS = ("evaluation", "train")
 
+# What the teacher may write for each decision. "pass" reads naturally for
+# "the curriculum is ready, hand it over" and costs nothing to accept.
+DECISION_ALIASES = {"evaluation": "evaluation", "evaluate": "evaluation",
+                    "eval": "evaluation",
+                    "train": "train", "pass": "train"}
+
 
 class ProtocolError(ValueError):
     """A decision/data/result file failed strict validation. Halt, do not retry."""
@@ -97,12 +103,13 @@ def validate_decision(obj, step: int):
         raise ProtocolError(f"decision.json is not a JSON object: {type(obj).__name__}")
     if "decision" not in obj:
         raise ProtocolError("decision.json missing required key 'decision'")
-    if obj["decision"] not in VALID_DECISIONS:
+    raw = str(obj["decision"]).strip().lower()
+    if raw not in DECISION_ALIASES:
         raise ProtocolError(
-            f"decision {obj['decision']!r} not in {VALID_DECISIONS}")
+            f"decision {obj['decision']!r} not in {sorted(DECISION_ALIASES)}")
     if "step" in obj and obj["step"] != step:
         raise ProtocolError(f"decision.json step {obj['step']} != expected {step}")
-    return {"step": step, "decision": obj["decision"]}
+    return {"step": step, "decision": DECISION_ALIASES[raw]}
 
 
 def validate_data_rows(rows):
@@ -128,6 +135,22 @@ def validate_data_rows(rows):
             **{k: r[k] for k in ("level", "subject", "band") if k in r},
         })
     return clean
+
+
+def validate_train_batch(rows, train_batch_size):
+    """A training curriculum must be EXACTLY train_batch_size problems.
+
+    The batch size is fixed for the run, so that every teacher step consumes the
+    same rollout budget as every other and as the no-teacher baseline. Padding a
+    short curriculum would invent problems; truncating a long one would silently
+    discard the teacher's design; accepting either would make one step's update
+    incomparable to the rest. So neither - say what is wrong and halt.
+    """
+    if len(rows) != train_batch_size:
+        raise ProtocolError(
+            f"a train needs exactly {train_batch_size} problems "
+            f"(train_batch_size); data.jsonl has {len(rows)}")
+    return rows
 
 
 def validate_result(obj):

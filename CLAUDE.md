@@ -159,6 +159,13 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
 - **The output tag follows the weights.** `--model <ckpt>` under a base model's
   config produces `<exp>__step<N>__<label>`, so a checkpoint cannot overwrite the
   baseline it is being compared against.
+- **The teacher's interface is data, and nothing else.** Group size, batch size,
+  model, sampling and GPU count are fixed from the config at run start and
+  passed to `run_teacher_step.sh` as arguments. They used to be derived from the
+  teacher's own file — `TB = len(data.jsonl)` — so a step where it wrote 8
+  problems consumed half the rollouts of one where it wrote 16, and neither
+  matched the baseline. A train curriculum is now exactly `train_batch_size`
+  rows or the run halts.
 - **hydra writes its run dir relative to cwd.** Both training scripts launch
   from the repo root, where `outputs/` is now the shared bucket, so an
   unpinned verl launch drops `outputs/<date>/<time>/` of hydra config in with

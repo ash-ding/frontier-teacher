@@ -1,36 +1,58 @@
-# The observational teacher-in-the-loop curriculum loop.
+# The teacher-in-the-loop curriculum loop.
 #
-# This configures train/frontier_model/teacher/orchestrator.py, not an
-# evaluation. Every field below can also be given on the command line, and for
-# each field independently the command line wins, then this file, then the
-# orchestrator's own default - the same rule eval/evaluate.py follows.
+# This configures train/frontier_model/teacher/orchestrator.py. Every field can
+# also be given on the command line, and for each field independently the command
+# line wins, then this file, then the orchestrator's own default -- the same rule
+# eval/evaluate.py follows.
+#
+# EVERYTHING HERE IS FIXED WHEN THE RUN STARTS and is identical on every step.
+# The teacher's only interface to the student is DATA: the problems it writes for
+# an evaluation, and the curriculum it writes for a training step. It does not
+# choose the model, the group size, the batch size, the sampling parameters, or
+# how many GPUs a step gets. That is what makes a teacher run comparable to the
+# no-teacher GRPO baseline: the two differ in the problems, and in nothing else.
+#
+# A copy of this file, fully resolved, plus the evaluation and training source it
+# selects, is written into every run's pipeline/ directory for the teacher to
+# read.
 
 # --- teacher (a frontier model, driven through `claude -p`) --------------------
 teacher_model: opus-4.8       # alias passed to `claude --model`
 teacher_timeout_s: 1800       # kill a teacher turn that runs longer than this.
                               # The claude CLI has no turn cap, so this is the
                               # only guard against a turn that will not end.
-halt_on_duplicate: true       # halt if a step's (decision, data) repeats verbatim
+halt_on_duplicate: true       # halt if a sub-action's (decision, data) repeats verbatim
 consecutive_failure_abort: 2  # recorded on the abort-log line. The loop is
-                              # fail-safe and halts on the FIRST failure - a
+                              # fail-safe and halts on the FIRST failure -- a
                               # failed teacher turn, or a malformed decision.json
-                              # or data.jsonl - so this is not a retry budget. It
+                              # or data.jsonl -- so this is not a retry budget. It
                               # never best-effort parses and never retries.
 
 # --- run / workspace -----------------------------------------------------------
 # One step is one TRAINING update. Within a step the teacher may evaluate any
 # number of times, always against the same checkpoint; the step closes only when
-# it chooses to train. So `steps: 4` means four GRPO updates.
+# it trains. So `steps: 4` means four GRPO updates.
 steps: 4
 max_evals_per_step: 10        # reaching this without a train halts the run
                               # cleanly. A train is never fabricated to proceed.
 output_path: outputs/frontier-model   # run_<timestamp>/ is created under here
-n_gpus: 8
 
-# --- student / GRPO ------------------------------------------------------------
-grpo_config: llama32-3b                     # preset in run_teacher_step.sh
+# --- student and its GRPO update -----------------------------------------------
+# The student, and the shape of every training step. run_teacher_step.sh takes
+# these as arguments rather than deriving any of them from the teacher's file.
 base_model: unsloth/Llama-3.2-3B-Instruct   # step-0 weights; matches the preset
-train_max_problems: 16                      # extra teacher rows are truncated
+grpo_config: llama32-3b       # preset in run_teacher_step.sh: max response length,
+                              # temperature/top_p/top_k, vLLM memory fraction
+n_gpus: 8
+# G=32, TB=16, MB=8 is run_grpo.sh's sizing for its G=32 bands, verbatim. A
+# teacher step and a baseline step are then the same shape: 512 rollouts over 16
+# problems, split into two 8-problem gradient updates. Any other sizing here
+# would leave the two runs differing in something besides the problems.
+group_size: 32                # G: rollouts per problem
+train_batch_size: 16          # problems per step. The curriculum must be EXACTLY
+                              # this many rows -- fewer or more is a protocol
+                              # error, not something to pad or truncate around.
+ppo_mini_batch_size: 8        # -> 2 gradient updates over the batch
 train_step_timeout_s: 3600
 eval_step_timeout_s: 3600
 
@@ -39,20 +61,23 @@ eval_step_timeout_s: 3600
 # teacher read is part of the run's record. Omit the field for none.
 # reference_data: /abs/path/to/some.jsonl
 
-# Re-materialised from pristine git before every train or evaluate, so any edit
-# the teacher makes to them is discarded and the real run uses validated code.
-read_only_paths:
+# The code that will execute the teacher's decisions. Copied into the run's
+# pipeline/ directory so the teacher can read exactly what will run, and
+# re-materialised from pristine git before every action so an edit to the
+# originals is discarded.
+pipeline_source:
+  - eval/evaluate.py
+  - eval/metrics.py
   - eval/verifiers/extract.py
   - eval/verifiers/symbolic.py
   - eval/verifiers/exact_integer.py
-  - eval/evaluate.py
+  - train/frontier_model/run_teacher_step.sh
+  - train/frontier_model/to_verl_dataset.py
   - train/grpo/verl_reward.py
-  - train/grpo/run_grpo.sh
-  - train/grpo/to_verl_dataset.py
 
 # --- how each step's evaluation is run -----------------------------------------
 # eval/evaluate.py is invoked on the command line against the teacher's own
-# data.jsonl; these supply its settings.
+# data.jsonl; these supply its settings, and they too are the same every step.
 eval_base:
   temperature: 0.6
   top_p: 0.9
