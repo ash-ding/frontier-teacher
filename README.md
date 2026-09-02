@@ -147,12 +147,30 @@ experiment name so a re-run lands beside the original.
 ### Frontier teacher
 
 ```bash
-train/frontier_model/run_teacher_step.sh <step> <config> <workspace> <ckpt-dir>
+python train/frontier_model/teacher/orchestrator.py \
+    --config configs/grpo/llama32-3b-teacher.yaml \
+    --output-path outputs/frontier-model \
+    --reference-data /abs/path/to/some.jsonl        # optional
+python train/frontier_model/teacher/orchestrator.py \
+    --config configs/grpo/llama32-3b-teacher.yaml --dry-run   # no-GPU self-test
 ```
 
-The teacher writes problems, the student trains on them, and the loop evaluates
-with `eval/evaluate.py` unmodified — a plain command line against the data it
-just wrote.
+One step is one GRPO update. Within a step the teacher may evaluate the current
+checkpoint any number of times; the step closes only when it chooses to train,
+and reaching `max_evals_per_step` without training halts the run rather than
+fabricating one. Everything lands in `<output-path>/run_<timestamp>/`.
+
+Settings resolve the same way evaluation's do — command line, then the config
+file, then the script's default — so `--steps`, `--max-evals-per-step`,
+`--output-path` and `--reference-data` each override the config field of the
+same name. `--reference-data` takes one absolute file path and copies it into
+the run directory, so what the teacher read is part of the run's record; omit it
+and the teacher gets no reference data at all.
+
+Each step evaluates with `eval/evaluate.py` unmodified — a plain command line
+against the data the teacher just wrote, with the sub-action directory as
+`--output-path`. `run_teacher_step.sh` is the single-GRPO-update executor the
+loop calls; it is not run by hand.
 
 ### Analysis
 

@@ -159,6 +159,15 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
 - **The output tag follows the weights.** `--model <ckpt>` under a base model's
   config produces `<exp>__step<N>__<label>`, so a checkpoint cannot overwrite the
   baseline it is being compared against.
+- **Command line, then config file, then the script's default** — one rule, in
+  `eval/evaluate.py` and the teacher orchestrator alike. Setting a field in both
+  places is allowed; the command line simply wins, and evaluation prints every
+  value with the source it came from.
+- **A moved file is not a fixed caller.** The refactor left the teacher looking
+  for `{name}__teacher_eval.summary.json` (a filename `evaluate.py` stopped
+  writing), importing `to_verl_teacher_dataset` from `eval/`, and running
+  `scripts/run_teacher_step.sh`. All three are silent until the pipeline runs, so
+  `--dry-run` it after touching anything it calls.
 - **macOS `tar` packs AppleDouble twins.** Copying results to a node from a Mac
   doubled the file count with 163-byte `._*` files. Use `COPYFILE_DISABLE=1`.
 
