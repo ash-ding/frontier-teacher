@@ -1,0 +1,26 @@
+{
+  "tag": "llama32-3b__pass1_eq_1__step5__math500",
+  "model": "/home/asherding/code/frontier-teacher/outputs/checkpoints/llama32-3b__pass1_eq_1/global_step_5/actor/huggingface",
+  "config": "llama32-3b__pass1_eq_1__step5",
+  "task": "math500",
+  "n_problems": 500,
+  "samples_per_problem": 4,
+  "pass@1": 0.4185,
+  "pass@1_stderr": 0.017779136519830808,
+  "truncation_rate": 0.0395,
+  "no_answer_rate": 0.08,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "top_k": -1,
+    "max_tokens": 4096,
+    "enable_thinking": null
+  },
+  "pass@4": 0.628,
+  "pass@4_stderr": 0.021637197985722334,
+  "mean_gen_tokens": 596.8225,
+  "gen_seconds": 74.1304361820221,
+  "shard": 0,
+  "num_shards": 1,
+  "headline_metric": "pass@1"
+}

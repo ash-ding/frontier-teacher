@@ -24,13 +24,25 @@ TASKS = [
 ]
 # Bands are ordered by difficulty, and each configuration slices at its own
 # measured pass@1, so the slugs differ per model while the roles do not.
+# Ordered by difficulty, hardest first. Five hues that are all mutually
+# separable under protan/deutan/tritan do not exist in this palette - a search
+# over every 5-subset of its eight slots returns nothing that passes in both
+# light and dark. So the three trainable bands take validated hues and the two
+# degenerate ones take neutrals with a dotted stroke: composite encoding, and it
+# matches the semantics, since p = 0 and p = 1 are boundaries rather than points
+# in the difficulty comparison.
 BANDS = [
+    (["pass1_eq_0"],                       "p0",     "0"),
     (["pass1_05-15pct", "pass1_12-25pct"], "hard",   "1"),
     (["pass1_40-60pct", "pass1_37-62pct"], "medium", "2"),
     (["pass1_85-95pct", "pass1_75-87pct"], "easy",   "3"),
+    (["pass1_eq_1"],                       "p1",     "4"),
 ]
-BAND_LABEL = {"hard": "hard (low pass@1)", "medium": "medium (≈50%)",
-              "easy": "easy (high pass@1)"}
+BAND_LABEL = {"p0": "p = 0 (never solved when profiled)",
+              "hard": "hard (low pass@1)", "medium": "medium (≈50%)",
+              "easy": "easy (high pass@1)",
+              "p1": "p = 1 (always solved when profiled)"}
+DOTTED = {"p0", "p1"}
 W, H = 300, 190
 PAD_L, PAD_R, PAD_T, PAD_B = 46, 16, 14, 30
 
@@ -43,7 +55,7 @@ def role_of(band):
 
 
 def slot_of(role):
-    return {"hard": "1", "medium": "2", "easy": "3"}[role]
+    return {"p0": "0", "hard": "1", "medium": "2", "easy": "3", "p1": "4"}[role]
 
 
 def panel(series, task, cfg):
@@ -90,7 +102,8 @@ def panel(series, task, cfg):
     for s in rows:
         role = role_of(s["band"])
         slot = slot_of(role)
-        dash = ' stroke-dasharray="5 3"' if s.get("variant") else ""
+        dash = (' stroke-dasharray="5 3"' if s.get("variant")
+                else ' stroke-dasharray="1.5 2.5"' if role in DOTTED else "")
         pts = [(p["rollouts"], p["score"] * 100) for p in s["points"]
                if p["score"] is not None]
         if len(pts) < 2:
@@ -116,17 +129,23 @@ def panel(series, task, cfg):
     # other - 10 collisions across 5 panels before this. Dodge vertically:
     # order by position, force a minimum gap, then shift the group back inside
     # the panel if the last one has been pushed past the axis.
-    GAP = 11.0
+    # With six lines in a 146 px plot area a fixed gap can need more room than
+    # exists; the down-dodge then hits the bottom, the corrective shift hits the
+    # top, and the two cancel leaving overlaps. Shrink the gap to fit instead.
+    top, bottom = PAD_T + 8, H - PAD_B - 2
+    GAP = 12.0        # one box height plus a hair, so labels never touch
+    if len(labels) > 1:
+        GAP = min(GAP, (bottom - top) / (len(labels) - 1))
     labels.sort(key=lambda l: l["y"])
     for i in range(1, len(labels)):
         if labels[i]["y"] - labels[i - 1]["y"] < GAP:
             labels[i]["y"] = labels[i - 1]["y"] + GAP
     if labels:
-        overflow = labels[-1]["y"] - (H - PAD_B - 2)
+        overflow = labels[-1]["y"] - bottom
         if overflow > 0:
             for l in labels:
                 l["y"] -= overflow
-        under = PAD_T + 8 - labels[0]["y"]
+        under = top - labels[0]["y"]
         if under > 0:
             for l in labels:
                 l["y"] += under

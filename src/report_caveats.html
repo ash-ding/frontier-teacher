@@ -25,6 +25,15 @@ and 12.0% — vLLM's batching makes even a fixed seed non-reproducible across sh
 layouts. Every interval quoted here bootstraps over generations as well as
 problems for that reason; resampling problems alone understates them by about a
 third.</li>
+<li><strong>Difficulty is measured at 8 or 32 samples, and training draws 32
+fresh ones every step.</strong> A band label is therefore a noisy estimate of the
+model's rate on those problems, not a property of them. This bites hardest at the
+edges: "never solved in 8 samples" misses a true 4.7% rate two thirds of the
+time, which is why the <code>p = 0</code> bands train at all.</li>
+<li><strong>Three problems in the 11,996-pool have an empty answer</strong> — the
+upstream extraction failed on their multiple-choice form. They can never be
+scored correct, so they sort into <code>p = 0</code> by construction rather than
+by being hard. They are dropped at conversion.</li>
 <li><strong>Llama's training pool excludes contaminated problems.</strong> It
 scores 61.0% on problems from the original MATH train split against 40.3% on
 test-derived ones, so its bands draw only from the 4,498 clean problems. The Qwen

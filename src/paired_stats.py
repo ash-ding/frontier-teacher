@@ -16,7 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HEADLINE = {"math500": "pass@1", "aime": "pass@4", "hmmt": "pass@4"}
 KS = {"pass@1": 1, "pass@4": 4}
-CKPT = re.compile(r"^(?P<cfg>.+?)__(?P<band>pass1_[^_]+)(?:__(?P<variant>g\d+))?"
+# lazy up to __step: band slugs contain underscores (pass1_eq_0, pass1_eq_1)
+CKPT = re.compile(r"^(?P<cfg>.+?)__(?P<band>pass1_.+?)(?:__(?P<variant>g\d+))?"
                   r"__step(?P<step>\d+)__(?P<task>\w+)\.records\.jsonl$")
 
 

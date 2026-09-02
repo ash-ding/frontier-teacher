@@ -71,10 +71,16 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
   startup and never re-sync. A converter fix reached the repo 40 minutes before
   the run it would have saved, and that run still died on the old code.
 - **Difficulty bands are measured at n=8 or n=32, and training samples G=32
-  fresh each step.** "Never solved in 8 samples" is not "never solved": the
-  thinking p=0 band scores 1.5% in training, so ~48% of its groups still produce
-  gradient. Any claim of the form "N% of the pool is untrainable" that rests on
-  n=8 is an overestimate.
+  fresh each step.** "Never solved in 8 samples" is not "never solved": at a true
+  rate of 4.7%, eight samples miss it 68% of the time. Measured, the p=0 bands
+  train — reward 1.4% → 6.3% (Llama), 4.7% → 9.6% (non-thinking) — and about half
+  their groups carry gradient. Any claim of the form "N% of the pool is
+  untrainable" that rests on n=8 is an overestimate, including the 92.9% figure
+  this repository quotes for thinking.
+- **p=1 is not a null band either.** Llama gains +3.7 on MATH-500 training only
+  on problems it already solved 32/32, and nothing out of domain. Training on
+  what a model already knows buys consistency on that distribution, not
+  capability — worth remembering before reading any in-domain gain as learning.
 - **Sharded evaluation writes `{tag}__{task}__sNofM.summary.json` per shard**
   until it merges. Those match the checkpoint filename pattern; anything counting
   or collecting summaries must exclude them or a job in flight reads as finished.

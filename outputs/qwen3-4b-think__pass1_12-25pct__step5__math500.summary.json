@@ -5,10 +5,10 @@
   "task": "math500",
   "n_problems": 500,
   "samples_per_problem": 4,
-  "pass@1": 0.955,
-  "pass@1_stderr": 0.008067227548584537,
-  "truncation_rate": 0.009,
-  "no_answer_rate": 0.004,
+  "pass@1": 0.9575,
+  "pass@1_stderr": 0.007399121163217693,
+  "truncation_rate": 0.0075,
+  "no_answer_rate": 0.0035,
   "sampling": {
     "temperature": 0.6,
     "top_p": 0.95,
@@ -16,11 +16,9 @@
     "max_tokens": 30000,
     "enable_thinking": true
   },
-  "pass@4": 0.976,
-  "pass@4_stderr": 0.00685141472745119,
-  "mean_gen_tokens": 5077.4605,
-  "gen_seconds": 3029.3980808258057,
-  "shard": 0,
-  "num_shards": 1,
-  "headline_metric": "pass@1"
+  "pass@4": 0.988,
+  "pass@4_stderr": 0.004874373707264981,
+  "mean_gen_tokens": 5042.447,
+  "gen_seconds": 609.4729323387146,
+  "merged_from_shards": 8
 }

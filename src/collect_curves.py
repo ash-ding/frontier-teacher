@@ -27,9 +27,14 @@ HEADLINE = {"math500": "pass@1", "aime": "pass@4", "hmmt": "pass@4"}
 # because the default mapping ties group size to the band and so also ties how
 # many distinct problems a step covers (512/G). Without capturing it here those
 # runs are silently dropped, since the band group cannot span the extra field.
-CKPT = re.compile(r"^(?P<cfg>.+?)__(?P<band>pass1_[^_]+)(?:__(?P<variant>g\d+))?"
+# The band group must be lazy up to __step, not [^_]+: band slugs contain
+# underscores of their own (pass1_eq_0, pass1_eq_1), and a class that excludes
+# them simply fails to match - the run then falls through to BASE, whose cfg
+# group DOES admit underscores, and every checkpoint of that run is silently
+# filed as a baseline. Anchoring BASE against __step is what stops that.
+CKPT = re.compile(r"^(?P<cfg>.+?)__(?P<band>pass1_.+?)(?:__(?P<variant>g\d+))?"
                   r"__step(?P<step>\d+)__(?P<task>\w+)\.summary\.json$")
-BASE = re.compile(r"^(?P<cfg>[\w.-]+)__(?P<task>math500|aime|hmmt)\.summary\.json$")
+BASE = re.compile(r"^(?P<cfg>[\w.-]+?)__(?P<task>math500|aime|hmmt)\.summary\.json$")
 
 
 def main():
@@ -65,7 +70,7 @@ def main():
             })
             continue
         b = BASE.match(p.name)
-        if b:
+        if b and "__step" not in p.name and "pass1_" not in p.name:
             task = b["task"]
             baselines[(b["cfg"], task)] = {
                 "rollouts": 0,

@@ -7,8 +7,8 @@
   --bg:#f4f5f7; --surface:#fcfcfd; --surface-2:#eef0f4;
   --ink:#12131a; --ink-2:#4e5261; --ink-3:#7b8095;
   --rule:#dcdfe7; --rule-2:#c3c8d4;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
-  --accent:#2a78d6;
+  --s0:#5b6478; --s1:#eb6834; --s2:#1baf7a; --s3:#4a3aa7; --s4:#a8afbd;
+  --accent:#4a3aa7;
   --shadow:0 1px 2px rgba(18,19,26,.05),0 8px 24px -12px rgba(18,19,26,.18);
 }
 @media (prefers-color-scheme:dark){
@@ -16,8 +16,8 @@
     --bg:#101013; --surface:#1a1a19; --surface-2:#232326;
     --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
     --rule:#2e2e33; --rule-2:#3d3d44;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
-    --accent:#3987e5;
+    --s0:#a8afbd; --s1:#d95926; --s2:#199e70; --s3:#9085e9; --s4:#5b6478;
+    --accent:#9085e9;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
   }
 }
@@ -25,8 +25,8 @@
   --bg:#101013; --surface:#1a1a19; --surface-2:#232326;
   --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
   --rule:#2e2e33; --rule-2:#3d3d44;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
-  --accent:#3987e5;
+  --s0:#a8afbd; --s1:#d95926; --s2:#199e70; --s3:#9085e9; --s4:#5b6478;
+  --accent:#9085e9;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
 }
 *{box-sizing:border-box}
@@ -66,8 +66,10 @@ a{color:var(--accent)}
   font-size:13px;color:var(--ink-2);margin:26px 0 14px}
 .key{display:inline-flex;align-items:center;gap:7px}
 .swatch{width:22px;height:3px;border-radius:2px;display:inline-block}
-.k1 .swatch{background:var(--s1)} .k2 .swatch{background:var(--s2)}
-.k3 .swatch{background:var(--s3)}
+.k0 .swatch{background:var(--s0)} .k1 .swatch{background:var(--s1)}
+.k2 .swatch{background:var(--s2)} .k3 .swatch{background:var(--s3)}
+.k4 .swatch{background:var(--s4)}
+.k0 .swatch,.k4 .swatch{height:2px}
 .dashkey .swatch{background:linear-gradient(90deg,var(--ink-3) 60%,transparent 60%);
   background-size:7px 3px}
 
@@ -100,9 +102,11 @@ a{color:var(--accent)}
 .dot{stroke:var(--surface);stroke-width:1.6}
 .endlab{font-size:9.5px;font-weight:700}
 .stop{fill:none;stroke:var(--ink-3);stroke-width:1.4;stroke-dasharray:2 2}
+.s0{stroke:var(--s0)} circle.s0{fill:var(--s0)} text.s0{fill:var(--s0);stroke:none}
 .s1{stroke:var(--s1)} circle.s1{fill:var(--s1)} text.s1{fill:var(--s1);stroke:none}
 .s2{stroke:var(--s2)} circle.s2{fill:var(--s2)} text.s2{fill:var(--s2);stroke:none}
 .s3{stroke:var(--s3)} circle.s3{fill:var(--s3)} text.s3{fill:var(--s3);stroke:none}
+.s4{stroke:var(--s4)} circle.s4{fill:var(--s4)} text.s4{fill:var(--s4);stroke:none}
 
 /* table */
 .tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:9px;
@@ -152,9 +156,11 @@ no teacher: the control that a teacher-side method has to beat.</p>
 </div>
 
 <div class="legend">
-  <span class="key k1"><i class="swatch"></i> hard band — low pass@1</span>
-  <span class="key k2"><i class="swatch"></i> medium band — ≈50%</span>
-  <span class="key k3"><i class="swatch"></i> easy band — high pass@1</span>
+  <span class="key k0"><i class="swatch"></i> p = 0 — never solved when profiled</span>
+  <span class="key k1"><i class="swatch"></i> hard — low pass@1</span>
+  <span class="key k2"><i class="swatch"></i> medium — ≈50%</span>
+  <span class="key k3"><i class="swatch"></i> easy — high pass@1</span>
+  <span class="key k4"><i class="swatch"></i> p = 1 — always solved when profiled</span>
   <span class="key dashkey"><i class="swatch"></i> matched-group-size control</span>
   <span style="color:var(--ink-3)">dotted rule = untrained baseline · label = change from it</span>
 </div>

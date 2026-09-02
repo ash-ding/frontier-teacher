@@ -332,7 +332,7 @@ differently by band", nothing stronger. The thinking middle band is thinner
 still: 200 problems over 20 steps is 6.4 epochs, so a rise there is as plausibly
 memorisation of 200 items as learning.
 
-### Results: all nine cells and three controls
+### Results: fifteen cells and three controls
 
 Change from the untrained model at 10,240 rollouts, with a two-level bootstrap
 over both problems and generations. Bold is an interval clear of zero.
@@ -356,6 +356,46 @@ over both problems and generations. Bold is an interval clear of zero.
 **Every cell moves up on the benchmark its training data came from.** Plain GRPO
 on MATH problems improves MATH-500 for both configurations and all three bands.
 Nothing below disputes that; the interest is in what else moves, and when.
+
+#### The degenerate bands are not degenerate
+
+`p = 0` and `p = 1` were included as the cases plain GRPO provably cannot use:
+a group whose G rollouts all fail, or all succeed, has zero advantage and no
+gradient. **That reasoning was wrong**, and the error is instructive. The bands
+were profiled at n = 8 (Qwen) or n = 32 (Llama); training draws G = 32 fresh
+samples every step. "Never solved in 8 samples" is not "never solved".
+
+Measured training reward on the `p = 0` bands, first step to last:
+
+| | first step | last step | 512 rollouts correct, first → last |
+|---|---:|---:|---|
+| Llama | 1.4% | 6.3% | 7 → 32 |
+| non-thinking | 4.7% | 9.6% | 24 → 49 |
+| thinking | 0.4% | 1.8% | 2 → 9 |
+
+At a true rate of 4.7%, eight samples miss it 68% of the time. `critic/advantages/max`
+reaches 5.48 on nearly every step of every `p = 0` run — the exact value for a
+group of 32 with one success, which is the strongest signal a group can carry.
+For the thinking `p = 0` band, bounding from the reward, at most 48% of its 320
+groups were degenerate and exactly one step out of twenty had no gradient at all.
+
+**This corrects a claim made elsewhere in this file.** "92.9% of the thinking
+pool produces no gradient" is derived from an n = 8 profile and is an
+overestimate. The direction of the argument — that this configuration has little
+for on-policy RL to work with — survives; the number does not. `docs/plan.md` §3
+(re-profile the `p = 0` sets at n = 32) moves from optional to necessary.
+
+#### Training on what a model already knows buys consistency, not capability
+
+Llama's `p = 1` band — problems it solved 32 times out of 32 when profiled —
+gains **+3.7 [1.6, 5.9] on MATH-500**, an interval clear of zero and larger than
+several bands achieve on the transfer benchmarks. Out of domain it gains nothing:
++0.8 on AIME, +0.9 on HMMT, both well inside the noise.
+
+The mechanism is visible in the training reward: it starts at 97.3%, not 100%. At
+temperature the model fails these problems a few percent of the time, and GRPO
+suppresses that failure. What improves is reliability on the distribution the
+problems came from, which is exactly what does not transfer.
 
 #### The in-domain metric saturates where transfer begins
 

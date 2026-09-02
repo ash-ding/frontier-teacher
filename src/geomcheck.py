@@ -20,10 +20,16 @@ for i, p in enumerate(panels):
         labs.append((x0, x0+w, y-9, y+2, slot, txt))
         if y < 2 or y > H-PB+6 or x0 < 0 or x0+w > W:
             bad_lab += 1; print("  panel %d label out of bounds %r" % (i,txt))
+    # Require a real overlap, not a touching edge. Labels dodged to exactly one
+    # box-height apart come out of float arithmetic 1e-14 apart in the wrong
+    # direction (135.2-9 < 124.2+2), which a strict test reports as a collision
+    # that does not exist on screen.
+    EPS = 0.5
     for a in range(len(labs)):
         for b in range(a+1, len(labs)):
             A, B = labs[a], labs[b]
-            if A[0] < B[1] and B[0] < A[1] and A[2] < B[3] and B[2] < A[3]:
+            if (min(A[1],B[1]) - max(A[0],B[0]) > EPS
+                    and min(A[3],B[3]) - max(A[2],B[2]) > EPS):
                 collisions += 1
                 print("  panel %d labels overlap: %r x %r" % (i, A[5], B[5]))
 tokens = set(re.findall(r'--([a-z0-9-]+)\s*:', h))

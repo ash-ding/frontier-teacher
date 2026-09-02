@@ -7,8 +7,8 @@
   "samples_per_problem": 4,
   "pass@1": 0.9575,
   "pass@1_stderr": 0.0072624366415097825,
-  "truncation_rate": 0.0065,
-  "no_answer_rate": 0.0025,
+  "truncation_rate": 0.006,
+  "no_answer_rate": 0.0045,
   "sampling": {
     "temperature": 0.6,
     "top_p": 0.95,
@@ -18,9 +18,7 @@
   },
   "pass@4": 0.988,
   "pass@4_stderr": 0.004874373707264981,
-  "mean_gen_tokens": 5084.2055,
-  "gen_seconds": 3088.636046886444,
-  "shard": 0,
-  "num_shards": 1,
-  "headline_metric": "pass@1"
+  "mean_gen_tokens": 5003.0745,
+  "gen_seconds": 595.0750734806061,
+  "merged_from_shards": 8
 }

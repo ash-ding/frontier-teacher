@@ -5,10 +5,10 @@
   "task": "aime",
   "n_problems": 150,
   "samples_per_problem": 8,
-  "pass@1": 0.69,
-  "pass@1_stderr": 0.030555081007771837,
-  "truncation_rate": 0.1275,
-  "no_answer_rate": 0.07166666666666667,
+  "pass@1": 0.6733333333333333,
+  "pass@1_stderr": 0.030464952785907554,
+  "truncation_rate": 0.12916666666666668,
+  "no_answer_rate": 0.07416666666666667,
   "sampling": {
     "temperature": 0.6,
     "top_p": 0.95,
@@ -16,11 +16,11 @@
     "max_tokens": 30000,
     "enable_thinking": true
   },
-  "pass@4": 0.8287619047619048,
-  "pass@4_stderr": 0.028023830906796464,
+  "pass@4": 0.820095238095238,
+  "pass@4_stderr": 0.02824521238018581,
   "pass@8": 0.8733333333333333,
-  "pass@8_stderr": 0.02724758744596762,
-  "mean_gen_tokens": 15796.440833333334,
-  "gen_seconds": 1882.1069045066833,
+  "pass@8_stderr": 0.027247587445967628,
+  "mean_gen_tokens": 15874.625833333334,
+  "gen_seconds": 1879.432956457138,
   "merged_from_shards": 8
 }
