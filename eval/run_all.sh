@@ -4,7 +4,8 @@
 #
 # Generations were NOT saved on the first pass, which is why the original six
 # baseline runs have no reasoning traces - the data does not exist anywhere.
-# Do not remove --save-generations.
+# Generations are written unconditionally by eval/evaluate.py; there is no
+# flag left to forget.
 set -u
 cd "$(dirname "$0")/.."
 source ~/miniforge3/etc/profile.d/conda.sh
@@ -12,8 +13,7 @@ conda activate frontier-teacher
 
 CONFIGS="${CONFIGS:-llama32-3b qwen3-4b-think qwen3-4b-nothink}"
 TASKS="${TASKS:-math500 aime hmmt}"
-GENDIR="$HOME/data/frontier-teacher/generations"
-mkdir -p logs outputs "$GENDIR"
+mkdir -p logs outputs
 
 i=0
 for cfg in $CONFIGS; do
@@ -21,7 +21,7 @@ for cfg in $CONFIGS; do
     log="logs/${cfg}__${task}.log"
     CUDA_VISIBLE_DEVICES=$((i % 8)) VLLM_LOGGING_LEVEL=WARNING \
       nohup python eval/evaluate.py --config "configs/eval/${cfg}.yaml" --task "$task" \
-        --save-generations "$GENDIR" > "$log" 2>&1 &
+        > "$log" 2>&1 &
     echo "  gpu $((i % 8))  ${cfg}/${task}  pid $!"
     i=$((i+1))
   done

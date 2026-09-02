@@ -8,10 +8,10 @@ them, so a checkpoint sweep does not need 36 near-identical config files.
 
 Three things are deliberately not optional:
 
-  Generations are always saved. `--save-generations` was a flag before and was
-  forgotten on every checkpoint evaluation in the study, so 141 runs kept only
-  verdicts. The checkpoints were deleted afterwards, which made the traces
-  unrecoverable. Whether to keep them is not a decision worth re-making.
+  Generations are always saved, beside the summary and records rather than in a
+  tree of their own. `--save-generations` was a flag before and was forgotten on
+  every checkpoint evaluation in the study, so 141 runs kept only verdicts; the
+  checkpoints were then deleted, which made the traces unrecoverable.
 
   Every pass@k the sample count supports is reported. n samples produce the
   whole ladder for free, and one k hides the shape: a problem solved once in
@@ -174,16 +174,17 @@ def main():
     outs = llm.generate(prompts, sp)
     gen_s = time.time() - t0
 
-    out_root = Path(args.out) if args.out else ROOT / "outputs"
-    outdir = out_root / R["out_subdir"]
-    gendir = out_root / "generations"
+    # Summary, per-problem records and raw generations all land in one place.
+    # A separate generations/ tree meant three directories had to be kept in
+    # step by hand, and the traces for a run were one directory away from the
+    # numbers that summarise them.
+    outdir = (Path(args.out) if args.out else ROOT / "outputs") / R["out_subdir"]
     outdir.mkdir(parents=True, exist_ok=True)
-    gendir.mkdir(parents=True, exist_ok=True)
 
     records = []
     # Generations are written as they are produced, not buffered to the end: a
     # shard killed mid-run has cost a 12%-complete evaluation before.
-    with (gendir / f"{tag}.generations.jsonl").open("w") as genf:
+    with (outdir / f"{tag}.generations.jsonl").open("w") as genf:
         for row, out in zip(rows, outs):
             per_sample = []
             for si, comp in enumerate(out.outputs):
@@ -221,7 +222,7 @@ def main():
           f"  truncated={100*summary['truncation_rate']:.1f}%"
           f"  no_answer={100*summary['no_answer_rate']:.1f}%")
     print(f"  -> {outdir}/{tag}.summary.json + .records.jsonl")
-    print(f"  -> {gendir}/{tag}.generations.jsonl")
+    print(f"  -> {outdir}/{tag}.generations.jsonl")
 
 
 if __name__ == "__main__":

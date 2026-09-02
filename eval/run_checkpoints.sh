@@ -39,14 +39,6 @@ CKROOT_BASE="$REPO/.local_checkpoints"
 CKROOT="$CKROOT_BASE/$EXP"
 TASKS="math500 aime hmmt"
 mkdir -p logs outputs
-# Checkpoint evaluations were writing verdicts but not reasoning. The records
-# keep `correct`, `extracted`, `truncated` and `n_tokens` per sample - enough to
-# score, not enough to read - while the baselines had saved full generations
-# since Phase A. Nothing downstream can recover the text once the checkpoint is
-# deleted, so error analysis on a trained model was impossible. Generations go to
-# the shared bucket, which has room; the container disk does not.
-GENDIR="$HOME/data/frontier-teacher/generations"
-mkdir -p "$GENDIR"
 [ -d "$CKROOT" ] || { echo "no checkpoints at $CKROOT"; exit 1; }
 
 # A wave must not start while the previous one still holds memory. Four Llama
@@ -74,7 +66,7 @@ run_one () {   # gpu step task dir
 
   CUDA_VISIBLE_DEVICES=$gpu VLLM_LOGGING_LEVEL=WARNING \
     python eval/evaluate.py --config "configs/eval/${CFG}.yaml" --task "$task" \
-      --model "$dir" --name "$tag" --save-generations "$GENDIR" \
+      --model "$dir" --name "$tag" \
       > "logs/eval__${tag}__${task}.log" 2>&1 &
   local pid=$!
   local waited=0

@@ -7,17 +7,16 @@ set -u
 cd "$(dirname "$0")/.."
 CFG="${1:?usage: run_profile.sh <config-name>}"
 TASK=mathtrain
-GENDIR="$HOME/data/frontier-teacher/generations"
 
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate frontier-teacher
-mkdir -p logs outputs "$GENDIR"
+mkdir -p logs outputs
 
 N=8
 for i in $(seq 0 $((N-1))); do
   CUDA_VISIBLE_DEVICES=$i VLLM_LOGGING_LEVEL=WARNING \
     nohup python eval/evaluate.py --config "configs/eval/${CFG}.yaml" --task "$TASK" \
-      --shard "$i" --num-shards "$N" --save-generations "$GENDIR" \
+      --shard "$i" --num-shards "$N" \
       > "logs/${CFG}__${TASK}__s${i}.log" 2>&1 &
   echo "  gpu $i  shard $i/$N  pid $!"
 done

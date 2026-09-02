@@ -30,14 +30,6 @@ CKROOT_BASE="$REPO/.local_checkpoints"
 CKROOT="$CKROOT_BASE/$EXP"
 TASKS="math500 aime hmmt"
 mkdir -p logs outputs
-# Checkpoint evaluations were writing verdicts but not reasoning. The records
-# keep `correct`, `extracted`, `truncated` and `n_tokens` per sample - enough to
-# score, not enough to read - while the baselines had saved full generations
-# since Phase A. Nothing downstream can recover the text once the checkpoint is
-# deleted, so error analysis on a trained model was impossible. Generations go to
-# the shared bucket, which has room; the container disk does not.
-GENDIR="$HOME/data/frontier-teacher/generations"
-mkdir -p "$GENDIR"
 [ -d "$CKROOT" ] || { echo "no checkpoints at $CKROOT"; exit 1; }
 
 # Never launch onto a card that is still held. A reaped job can leave an
@@ -83,7 +75,7 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
         CUDA_VISIBLE_DEVICES=$g VLLM_LOGGING_LEVEL=WARNING \
           python eval/evaluate.py --config "configs/eval/${CFG}.yaml" --task "$task" \
             --model "$d" --name "$tag" --shard "$g" --num-shards "$NGPU" \
-            --save-generations "$GENDIR" \
+            \
             > "logs/eval__${tag}__${task}__s${g}.log" 2>&1 &
         pids+=($!)
       done
