@@ -284,7 +284,7 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
     argv = [
         "python", str(EVAL_DIR / "evaluate.py"),
         "--config", str(eval_cfg),
-        "--weights", str(model_path),
+        "--model", str(model_path),
         "--name", name,
         "--limit", "0",
         "--out", str(step_dir),

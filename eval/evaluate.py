@@ -32,7 +32,7 @@ Removing the lookup is what lets a pipeline evaluate data it has just written:
 so nothing has to be registered first.
 
   python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml
-  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml --weights <ckpt-dir>
+  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml --model <ckpt-dir>
   python eval/evaluate.py --model Qwen/Qwen3-4B --data /abs/step7/data.jsonl \
                           --label teacher_step7 --verifier symbolic --samples 4
 """
@@ -94,18 +94,15 @@ def build_args():
                    help="short name for what is being evaluated, e.g. aime. Forms "
                         "the second half of the output tag.")
     g.add_argument("--model", default=None,
-                   help="the model to evaluate: a HuggingFace id or a local path")
+                   help="what to evaluate: a HuggingFace id, or a checkpoint "
+                        "directory. A checkpoint is a model; there is no separate "
+                        "flag for one.")
     g.add_argument("--model-label", default=None,
                    help="short name for the model in output tags, e.g. qwen3-4b-think; "
                         "defaults to the last path component of --model")
-    g.add_argument("--weights", default=None,
-                   help="evaluate THESE weights using the config's profile - a "
-                        "checkpoint directory. Distinct from the config's `model`, "
-                        "which names the model the profile describes, so the two "
-                        "never conflict. Omit to evaluate the config's own model.")
     g.add_argument("--name", default=None,
-                   help="output tag. Derived from the model and the weights when "
-                        "omitted, so a checkpoint can never overwrite a baseline.")
+                   help="output tag. Derived from --model and --label when omitted, so "
+                        "a checkpoint cannot overwrite a baseline.")
 
     g = ap.add_argument_group("sampling - model-specific, defaults from the config")
     g.add_argument("--samples", type=int, default=None,
@@ -131,42 +128,45 @@ def build_args():
 
 
 def resolve_name(args, R):
-    """The output tag: <label of what was evaluated>__<label of the data>.
+    """The output tag: <what was evaluated>__<label of the data>.
 
     `name` forms the filename, so two runs sharing one overwrite each other.
-    Evaluating a checkpoint and forgetting to rename would replace a baseline -
-    the rollout-0 anchor every curve is measured against - with a checkpoint's
-    score, silently. So the name follows the weights: give --weights and the tag
-    is derived from the experiment and step in that path, whatever else is
-    forgotten.
+    Evaluating a checkpoint under a base model's config and forgetting to rename
+    would replace that model's baseline - the rollout-0 anchor every curve and
+    every paired comparison is measured against - with a checkpoint's score, and
+    nothing would warn you. So the name follows the model actually loaded:
 
-        .local_checkpoints/llama32-3b__pass1_05-15pct/global_step_20/actor/huggingface
-        -> llama32-3b__pass1_05-15pct__step20__<label>
+        unsloth/Llama-3.2-3B-Instruct                       -> llama32-3b__aime
+        .../llama32-3b__pass1_05-15pct/global_step_20/...   -> llama32-3b__pass1_05-15pct__step20__aime
+
+    model_label names the first half when the model is a released id; a
+    checkpoint path names itself, from the experiment and step in it.
     """
     if args.name:
         return args.name
-    subject = R.get("model_label") or Path(R["model"]).name
-    if args.weights:
-        parts = Path(args.weights).resolve().parts
-        step = next((p for p in reversed(parts) if p.startswith("global_step_")), None)
-        subject = (f"{parts[parts.index(step) - 1]}__step{step.rsplit('_', 1)[1]}"
-                   if step else Path(args.weights).name)
+    parts = Path(R["model"]).expanduser().parts
+    step = next((p for p in reversed(parts) if p.startswith("global_step_")), None)
+    if step:
+        subject = f"{parts[parts.index(step) - 1]}__step{step.rsplit('_', 1)[1]}"
+    else:
+        subject = R.get("model_label") or Path(R["model"]).name
     return f"{subject}__{R['label']}"
 
 
 def resolve(args):
     """Settle every setting. Precedence, for each field independently:
 
-        1. the config, if it names the field
-        2. the command line, if it was given
+        1. the command line, if given
+        2. the config, if it names the field
         3. the script's own default, from DEFAULTS
 
-    Config wins over the command line. That is the opposite of the usual
-    convention, so a run says out loud which command-line values it ignored
-    rather than letting one quietly do nothing.
+    The command line wins, and the run prints where every value came from, so
+    nothing has to be remembered. The alternative - config winning - reads as
+    safer but is not: `--config <model>.yaml --model <checkpoint>` would then
+    evaluate the base model and ignore the checkpoint, which is a wrong answer
+    rather than an error.
 
-    Two fields are not settings and do not take part: `--weights` names weights
-    to evaluate with this config's profile, and `--out` says where to write.
+    `--out` is not a setting and does not take part; it says where to write.
     """
     cfg = yaml.safe_load(open(args.config)) if args.config else {}
     cfg = {k: v for k, v in cfg.items() if v is not None}
@@ -183,12 +183,7 @@ def resolve(args):
     }
     cli = {k: v for k, v in cli.items() if v is not None}
 
-    shadowed = sorted(set(cli) & set(cfg))
-    if shadowed:
-        print(f"note: {args.config} sets {', '.join(shadowed)}; the matching "
-              f"command-line values are ignored.")
-
-    R = {**DEFAULTS, **cli, **cfg}
+    R = {**DEFAULTS, **cfg, **cli}
     for req in ("model", "data", "label"):
         if not R.get(req):
             raise SystemExit(
@@ -197,8 +192,10 @@ def resolve(args):
 
     R["data_files"] = [Path(p).expanduser().resolve()
                        for p in ([R["data"]] if isinstance(R["data"], str) else R["data"])]
-    R["weights"] = args.weights or R["model"]
     R["name"] = resolve_name(args, R)
+    R["_sources"] = {k: ("command line" if k in cli else
+                         "config" if k in cfg else "default")
+                     for k in sorted(set(DEFAULTS) | set(cfg) | set(cli))}
     for k in ("samples", "max_tokens", "max_model_len", "top_k", "seed",
               "tensor_parallel_size"):
         R[k] = int(R[k])
@@ -231,13 +228,13 @@ def main():
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
 
-    tok = AutoTokenizer.from_pretrained(R["weights"])
+    tok = AutoTokenizer.from_pretrained(R["model"])
     tkw = {} if R["enable_thinking"] is None else {"enable_thinking": R["enable_thinking"]}
     prompts = [tok.apply_chat_template(
         [{"role": "user", "content": PROMPT.format(problem=r["problem"])}],
         tokenize=False, add_generation_prompt=True, **tkw) for r in rows]
 
-    llm = LLM(model=R["weights"], tensor_parallel_size=R["tensor_parallel_size"],
+    llm = LLM(model=R["model"], tensor_parallel_size=R["tensor_parallel_size"],
               gpu_memory_utilization=R["gpu_memory_utilization"],
               max_model_len=R["max_model_len"], dtype="bfloat16", seed=R["seed"],
               enforce_eager=False, trust_remote_code=True)
@@ -274,7 +271,7 @@ def main():
                             "samples": per_sample})
 
     summary = summarize(records, extra={
-        "tag": tag, "label": R["label"], "model": R["weights"],
+        "tag": tag, "label": R["label"], "model": R["model"],
         "profile_model": R["model"],
         "verifier": R["verifier"], "gen_seconds": gen_s,
         "sampling": {k: R[k] for k in ("temperature", "top_p", "top_k",
@@ -291,7 +288,15 @@ def main():
 
     head = R["headline_metric"] or "pass@1"
     ks = [k for k in summary if k.startswith("pass@") and not k.endswith("_stderr")]
-    print(f"{tag}  n={R['samples']}  verifier={R['verifier']}")
+    # Where every setting came from. Precedence is a rule you would otherwise
+    # have to remember; printing the resolution means you do not.
+    src = R.get("_sources", {})
+    shown = ("model", "label", "samples", "verifier", "temperature", "top_p",
+             "top_k", "max_tokens", "max_model_len", "enable_thinking")
+    print(f"{tag}  ({len(records)} problems)")
+    for k in shown:
+        if k in R:
+            print(f"    {k:18} {str(R[k]):<44} [{src.get(k, 'default')}]")
     print("  " + "  ".join(f"{k}={100*summary[k]:.1f}" for k in ks))
     print(f"  headline {head}={100*summary.get(head, float('nan')):.1f}"
           f"  truncated={100*summary['truncation_rate']:.1f}%"
