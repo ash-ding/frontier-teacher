@@ -52,14 +52,16 @@ W, H = 300, 190
 PAD_L, PAD_R, PAD_T, PAD_B = 46, 16, 14, 30
 
 
-def leak_panel(series, task, cfg):
+def leak_panel(series, task, cfg, per_step=None):
     """Two lines for one teacher run: the fifth it could see, and the rest.
 
-    Both come from the SAME four full-benchmark evaluations, split by the
-    manifest's id list -- same checkpoints, same sample counts, same grader, so
-    the only difference between the lines is which problems they are computed
-    over. The per-step reference tests run at a finer cadence but cover only the
-    seen fifth, so they cannot make this comparison.
+    The seen line is the loop's own per-step reference test, run after every
+    training update, so it has 21 points. The held-out line comes from splitting
+    the four milestone evaluations by the manifest's id list, so it has 5 -- the
+    four fifths are only ever scored there. The two are the same measurement in
+    every respect that matters: the reference tests take their sampling,
+    verifier and decoding verbatim from configs/eval/, which is what the
+    milestone evaluations use.
 
     A curriculum that exploited what the teacher read there would push the seen
     line above the held-out one and keep it there.
@@ -68,8 +70,14 @@ def leak_panel(series, task, cfg):
                 and s["band"] == "teacher"), None)
     if not row:
         return '<div class="panel empty">no teacher run yet</div>'
-    lines = {w: [(p["rollouts"], p[w] * 100) for p in row["points"]
-                 if p.get(w) is not None] for w in ("held_out", "seen")}
+    lines = {"held_out": [(p["rollouts"], p["held_out"] * 100)
+                          for p in row["points"] if p.get("held_out") is not None],
+             "seen": [(q["rollouts"], q["score"] * 100)
+                      for q in (per_step or {}).get(f"{cfg}__{task}", [])
+                      if q.get("score") is not None]}
+    if not lines["seen"]:   # no per-step data -> fall back to the milestone split
+        lines["seen"] = [(p["rollouts"], p["seen"] * 100)
+                         for p in row["points"] if p.get("seen") is not None]
     ys = [y for v in lines.values() for _, y in v]
     if not ys:
         return '<div class="panel empty">no teacher run yet</div>'
@@ -97,8 +105,9 @@ def leak_panel(series, task, cfg):
         d = " ".join(f'{"M" if i == 0 else "L"}{X(x):.1f},{Y(y):.1f}'
                      for i, (x, y) in enumerate(pts))
         out.append(f'<path class="line {cls}" d="{d}"/>')
+        r = 3.2 if which == "held_out" else 2.1   # 21 points need smaller dots
         for x, y in pts:
-            out.append(f'<circle class="dot {cls}" cx="{X(x):.1f}" cy="{Y(y):.1f}" r="3.2">'
+            out.append(f'<circle class="dot {cls}" cx="{X(x):.1f}" cy="{Y(y):.1f}" r="{r}">'
                        f'<title>{"held-out 4/5" if which=="held_out" else "seen 1/5"}'
                        f' · {x:,} rollouts · {y:.1f}%</title></circle>')
     out.append("</svg>")
@@ -294,13 +303,14 @@ def main():
     body = body.replace("<!--GRID-->", build_grid(False))
     body = body.replace("<!--GRID_TEACHER-->", build_grid(True, field="held_out"))
 
+    per_step = doc.get("per_step_reference", {})
     leak = []
     for tkey, tname, metric, kind in TASKS:
         leak.append(f'<div class="rowlab"><span class="tname">{tname}</span>'
                     f'<span class="tmetric">{metric}</span>'
                     f'<span class="tkind">{kind}</span></div>')
         for ckey, _, _ in CONFIGS:
-            leak.append(leak_panel(series, tkey, ckey))
+            leak.append(leak_panel(series, tkey, ckey, per_step))
     body = body.replace("<!--GRID_LEAK-->", "\n".join(leak))
     # Say which configurations have a teacher run rather than letting a missing
     # line read as a flat one.

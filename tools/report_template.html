@@ -221,11 +221,14 @@ no teacher: the control that a teacher-side method has to beat.</p>
 </div>
 
 <h2 class="sec">3 &middot; Did the teacher use what it could see?</h2>
-<p class="seclede">Two lines per panel, from the <em>same</em> four evaluations of
-  the same checkpoints, split only by which problems they are computed over: the
-  fifth the teacher could read in the run directory, and the four fifths it could
-  not. Same sample counts, same grader. A curriculum drawn from what it saw would
-  push the seen line above the held-out one and keep it there.</p>
+<p class="seclede">Two lines per panel. <strong>Seen</strong> is the loop's own
+  reference test, run after every training update, so it has a point per step.
+  <strong>Held-out</strong> is the other four fifths, which are only scored at the
+  four checkpoints — so it has five. The two are the same measurement in every
+  respect that matters: the reference tests take their sample counts, verifier
+  and decoding verbatim from the same config files the checkpoint evaluations
+  use. A curriculum drawn from what the teacher read there would push the seen
+  line above the held-out one and keep it there.</p>
 
 <div class="legend">
   <span class="key kH"><i class="swatch"></i> held-out 4/5 — never visible to the teacher</span>
@@ -237,9 +240,12 @@ no teacher: the control that a teacher-side method has to beat.</p>
   <div class="grid"><!--GRID_LEAK--></div>
 </div>
 <p style="font-size:13px;color:var(--ink-3);margin-top:10px">
-  The seen fifth is 100 / 30 / 19 problems, so its line is much noisier than the
-  held-out one — on HMMT a single problem is over five points. Read the two
-  lines' <em>separation</em>, not either one's wobble.</p>
+  The seen fifth is 100 / 30 / 19 problems against the held-out 400 / 120 / 74,
+  so its line is much noisier — on HMMT a single problem is over five points, and
+  its step-to-step jitter is sampling, not learning. Read the two lines'
+  <em>separation</em>, not either one's wobble. Where they sit at different
+  levels throughout, including at 0 rollouts, that is the two subsets differing
+  in difficulty, not anything the training did.</p>
 
 <h2>What the panels show</h2>
 <!--FINDINGS-->
