@@ -93,6 +93,11 @@ def build_args():
     g.add_argument("--label", default=None,
                    help="short name for what is being evaluated, e.g. aime. Forms "
                         "the second half of the output tag.")
+    g.add_argument("--model", default=None,
+                   help="the model to evaluate: a HuggingFace id or a local path")
+    g.add_argument("--model-label", default=None,
+                   help="short name for the model in output tags, e.g. qwen3-4b-think; "
+                        "defaults to the last path component of --model")
     g.add_argument("--weights", default=None,
                    help="evaluate THESE weights using the config's profile - a "
                         "checkpoint directory. Distinct from the config's `model`, "
@@ -172,6 +177,7 @@ def resolve(args):
         "top_p": args.top_p, "top_k": args.top_k,
         "gpu_memory_utilization": args.gpu_memory_utilization,
         "verifier": args.verifier, "model": args.model, "label": args.label,
+        "model_label": args.model_label,
         "data": args.data,
         "enable_thinking": None if args.thinking is None else args.thinking == "true",
     }
