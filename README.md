@@ -233,7 +233,7 @@ python -c "import vllm, torch; print(vllm.__version__, torch.__version__)"
 `Qwen/Qwen3-4B` is open. `meta-llama/Llama-3.2-3B-Instruct` is gated and needs an
 approved HF token; the configs default to `unsloth/Llama-3.2-3B-Instruct`, an
 ungated mirror of the same weights. To use the official repository instead, set a
-token and change `model:` in `configs/llama32-3b.yaml`:
+token and change `model:` in the relevant `configs/eval/*.yaml`:
 
 ```bash
 export HF_TOKEN=hf_...          # or: huggingface-cli login
@@ -245,8 +245,21 @@ The datasets are committed, so a fresh clone can evaluate immediately:
 
 ```bash
 conda activate frontier-teacher
-./scripts/run_all.sh              # baselines: 6 jobs, one GPU each
-python src/report.py              # results table
+# one evaluation, fully described by its config
+python eval/evaluate.py --config configs/eval/llama32-3b__math500.yaml
+
+# the same config against a checkpoint: the command line wins, and the output
+# tag follows the weights, so a baseline cannot be overwritten
+python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml \
+  --model .local_checkpoints/<exp>/global_step_20/actor/huggingface
+
+# no config at all: data written a moment ago, at any path
+python eval/evaluate.py --model Qwen/Qwen3-4B --model-label qwen3-4b-think \
+  --data /abs/path/step7/data.jsonl --label teacher_step7 \
+  --verifier symbolic --samples 4 --thinking true
+
+./eval/run_all.sh                 # all baselines, one GPU per job
+python tools/report.py            # results table
 ```
 
 The builders are only needed to verify the data or to refresh it from upstream.
@@ -262,10 +275,11 @@ Difficulty-profile a model over the training pool (8-way sharded, ~26 min for
 Llama at 32 samples; Qwen thinking takes hours):
 
 ```bash
-./scripts/run_profile.sh llama32-3b
-python eval/merge_shards.py --config configs/llama32-3b.yaml --task mathtrain
-python src/profile_report.py --records outputs/llama32-3b__mathtrain.records.jsonl
-python src/make_subsets.py --model llama32-3b
+./tools/run_profile.sh llama32-3b
+python eval/merge_shards.py --config configs/eval/llama32-3b__mathtrain.yaml
+python tools/profile_report.py \
+  --records outputs/math_profiling/llama32-3b__mathtrain.records.jsonl
+python tools/make_subsets.py --model llama32-3b
 ```
 
 Every builder asserts on its output — 30 AIME problems per year with integer
@@ -284,36 +298,60 @@ docs/plan.md            Open work, ordered by what unblocks what, plus the
 requirements.txt        Direct dependencies.
 requirements.lock.txt   Full resolved set, for exact reproduction.
 environment.yml         conda env spec.
-configs/          One YAML per model configuration: weights, decoding preset,
-                  and per-task sample counts and token budgets.
+configs/
+  eval/           One YAML per (model, benchmark) pair - 21 of them, each a
+                  complete evaluation: weights, decoding preset, sample count,
+                  verifier, data files. Each doubles as a template.
+  grpo/           Training-side configs.
 data/
   build_*.py      Dataset builders (assertions included).
   benchmark/      Held-out evaluation sets: MATH-500, AIME, HMMT.
   training_set/   The MATH training pool, split by original provenance.
-  further_improve/  Curated subsets sliced by measured difficulty - the pool
-                  teacher-student experiments draw from.
-src/
-  evaluate.py     vLLM generation + scoring for one (config, task) pair.
-                  Supports --shard/--num-shards for multi-GPU splitting.
-  grading.py      Answer extraction and equivalence checking.
-  summarize.py    pass@k estimators, shared by evaluate and merge.
-  merge_shards.py Recombine sharded runs into one summary + records file.
-  report.py       Benchmark results table.
-  profile_report.py  pass@1 distribution and band counts over a profiled pool.
-  make_subsets.py    Seeded sampling of the difficulty-banded subsets.
-scripts/
-  setup_env.sh    Environment bootstrap.
-  run_all.sh      All baseline jobs, one GPU each.
-  run_profile.sh  One model over the training pool, 8-way sharded.
-  sync_subsets.sh Push subsets to every node and verify by hash.
-outputs/          Where evaluate.py writes and where results live - one
-                  directory, no second copy to drift.
-  *.summary.json    Benchmark results (MATH-500, AIME, HMMT), tracked.
-  *.records.jsonl   Per-problem, per-sample verdicts, tracked.
-  math_profiling/   Training-pool profiling runs. The mathtrain task routes
-                  here via out_subdir, so it is declared once rather than
-                  passed on every command line. Summaries tracked; the 12-36 MB
-                  records and shard intermediates are not (see .gitignore).
+  further_improve/  Curated subsets sliced by measured difficulty.
+eval/             Everything that measures.
+  evaluate.py     vLLM generation + grading for one run. Config and command line
+                  both set any field; the command line wins, and the run prints
+                  where every value came from. --shard/--num-shards split a job.
+  metrics.py      pass@k for every k the sample count supports, plus the
+                  truncation and no-answer counters that say whether a score is
+                  a model result or a harness artefact.
+  verifiers/      Two, named by the config and never inferred: exact_integer
+                  (AIME - answers are integers 0-999 by the competition's rules)
+                  and symbolic (everything else). extract.py holds the \boxed{}
+                  extraction and the </think> split they share.
+  merge_shards.py Recombine a sharded run, recomputing metrics over the whole
+                  problem set rather than averaging shard means.
+  calibrate.py    Grading self-check: identity, specificity, thinking mode, and
+                  a table of hand-written equivalences.
+  check_baselines.py  Fail if a baseline's record ids no longer match what the
+                  harness emits - a mismatch yields an empty intersection rather
+                  than an error, and has cost three debugging rounds.
+  run_all.sh      Baselines, one GPU per job.
+  run_checkpoints.sh  One job per GPU. Right for Llama and non-thinking.
+  run_sharded.sh  One job at a time across all GPUs. Required for thinking,
+                  where a single HMMT job is 5.5 h on one card.
+train/
+  grpo/           The no-teacher baseline: run_grpo.sh (the verl config that
+                  matters), verl_reward.py (wraps eval/verifiers, so training
+                  and evaluation cannot disagree), to_verl_dataset.py.
+  frontier_model/ The teacher-in-the-loop pipeline.
+tools/            Off the critical path: subset sampling, difficulty reports,
+                  curve collection, paired statistics, the report renderer and
+                  its geometry and palette checks.
+scripts/          setup_env.sh, fetch_verl_source.sh, ckpt_janitor.sh.
+package/          verl.lock pins the exact verl commit; the source is fetched on
+                  demand and gitignored.
+outputs/          A symlink to ~/data/frontier-teacher/outputs on the shared
+                  bucket, so all three nodes read and write one set of results.
+                  A run's summary, per-problem records and raw generations land
+                  together.
+  benchmarks/     Baselines: the rollout-0 point of every curve.
+  grpo/           Checkpoint evaluations: the rest of every curve.
+  math_profiling/ Per-problem results over the 11,996-problem training pool -
+                  the difficulty measurement the subsets are cut from.
+  analysis/       curves.json and paired_stats.json, both regenerable.
+.local_checkpoints/  Node-local, gitignored. 26 GB per run, written and deleted
+                  within one node's evaluation.
 ```
 
 ## Datasets
@@ -447,7 +485,8 @@ The nine GRPO runs and their controls are written up in
 `tools/render_report.py` from `outputs/curves.json`:
 
 ```
-python src/collect_curves.py                    # summaries -> outputs/curves.json
+python tools/collect_curves.py                  # -> outputs/analysis/curves.json
+python tools/paired_stats.py                    # bootstrapped intervals
 python tools/render_report.py --out report.html   # 3x3 small multiples, no plotting deps
 ```
 
@@ -528,23 +567,19 @@ somewhat above the reported figure.
 
 ## What is not here
 
-Raw generations (~880 MB per profiled model) and the per-problem profiling
-records over the 12k pool (12–36 MB each) are not tracked. They live on the
-compute nodes under `$HOME/data/frontier-teacher/generations/` and `outputs/`
-respectively, and the records are rebuildable from the shards with
-`eval/merge_shards.py`.
+Results are no longer tracked in git. They live on the shared bucket under
+`~/data/frontier-teacher/outputs/`, which `outputs/` symlinks to on every node -
+2.7 GB of summaries, per-problem records and raw generations across three
+directories. That was previously a workaround for results existing only on
+container disks; the bucket removes the need, and the history of what was
+tracked before is intact.
 
-Raw generations were only ever written for the training-pool profiling runs.
-`run_all.sh` does not pass `--save-generations`, so the reasoning traces behind
-the MATH-500 and AIME numbers were never saved anywhere — the per-sample verdicts
-and extracted answers in `outputs/` are all that exists of those runs.
-Re-run with `--save-generations` if the traces themselves are needed.
+Checkpoints are node-local under `.local_checkpoints/`. verl writes each one
+twice: FSDP shards for resuming and a HuggingFace-format export for loading.
+Only the export is ever read, so a cron job strips the shards - which also
+removes any way to resume an interrupted run, a trade `docs/experiment.md`
+records the cost of.
 
-## Related work
-
-The difficulty-band methodology — selecting a training subset by the student's
-measured pass@1 rather than by a difficulty label — follows *Pedagogical RL:
-Teaching Models to Teach Themselves from Privileged Information* (Chakraborty,
-Ziems et al., 2026), which reports that a hard subset at roughly 8% pass@1
-concentrates the learning signal. Our 5%–15% Llama band has a measured mean
-pass@1 of 8.7% and is the closest analogue in this repository.
+verl's source is not vendored. `package/verl.lock` pins the exact commit and
+`scripts/fetch_verl_source.sh` fetches it, then checks the fetched tree against
+the installed package file by file.

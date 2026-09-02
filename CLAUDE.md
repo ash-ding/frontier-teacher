@@ -13,13 +13,18 @@ an experiment — several obvious ones have already been run or ruled out.
 
 | Path | |
 |---|---|
-| `configs/*.yaml` | one per model configuration; `tasks:` defines every benchmark, its sample count and headline metric |
-| `data/benchmark/` | MATH-500, AIME 2020–2024, HMMT (Feb 2025 / Nov 2025 / Feb 2026) |
+| `configs/eval/*.yaml` | one per (model, benchmark) pair - 21, each a complete evaluation and a template to copy |
+| `data/benchmark/` | MATH-500, AIME 2020-2024, HMMT (Feb 2025 / Nov 2025 / Feb 2026) |
 | `data/training_set/` | the 11,996-problem MATH pool, split by original provenance |
-| `data/further_improve/<model>/` | curated subsets by measured pass@1, with a `manifest.json` recording the decoding settings each was measured under |
-| `eval/evaluate.py` | the only evaluation path. `PROMPT` at the top is the single source of the prompt — training must use the same one |
-| `src/grading.py` | `grade()`; the reward function wraps this so training and evaluation cannot disagree |
-| `outputs/` | summaries and per-problem records are tracked in git; generations and profiling bulk are not |
+| `data/further_improve/<model>/` | subsets by measured pass@1, each with a `manifest.json` recording the decoding settings it was measured under |
+| `eval/evaluate.py` | the only evaluation path. Config and command line both set any field; the command line wins and the run prints every value's source |
+| `eval/verifiers/` | two, named by the config: `exact_integer` (AIME) and `symbolic` (the rest). `extract.py` holds the `\boxed{}` extraction and `</think>` split |
+| `eval/metrics.py` | pass@k for every k the sample count supports, plus truncation / no-answer counters |
+| `train/grpo/` | the no-teacher baseline. `verl_reward.py` wraps `eval/verifiers`, so training and evaluation cannot grade differently |
+| `train/frontier_model/` | the teacher-in-the-loop pipeline |
+| `tools/` | subset sampling, difficulty reports, curves, statistics, the report renderer and its checks |
+| `outputs/` | symlink to the shared bucket. A run's summary, records and generations land together, under `benchmarks/`, `grpo/` or `math_profiling/` |
+| `.local_checkpoints/` | node-local weights, gitignored |
 
 ## Environment
 
@@ -57,12 +62,26 @@ environment change.
 ## Running things
 
 ```bash
-train/grpo/run_grpo.sh <config> <band> [n_gpus]     # one GRPO run
-train/grpo/run_one.sh  <config> <band>              # train then evaluate
-eval/run_checkpoints.sh <config> <band> 8    # Llama / non-thinking: one job per GPU
-eval/run_sharded.sh     <config> <band> 8    # thinking: one job at a time, sharded across GPUs
-python src/collect_curves.py && python src/paired_stats.py && python tools/render_report.py
-python eval/check_baselines.py && python src/geomcheck.py outputs/report.html
+# evaluation - config, command line, or both (command line wins)
+python eval/evaluate.py --config configs/eval/llama32-3b__math500.yaml
+python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml --model <ckpt-dir>
+python eval/evaluate.py --model <id> --model-label <short> --data <any-path> \
+                        --label <what-it-is> --verifier symbolic --samples 8
+
+eval/run_all.sh                          # baselines, one GPU per job
+eval/run_checkpoints.sh  <cfg> <band> 8  # one job per GPU: Llama, non-thinking
+eval/run_sharded.sh      <cfg> <band> 8  # one job across all GPUs: thinking
+
+# training
+train/grpo/run_grpo.sh <config> <band> [n_gpus]
+train/grpo/run_one.sh  <config> <band>          # train then evaluate
+
+# analysis and checks
+python tools/collect_curves.py && python tools/paired_stats.py
+python tools/render_report.py --out report.html
+python eval/check_baselines.py                  # baseline ids still match
+python tools/geomcheck.py report.html           # marks in bounds, labels not colliding
+scripts/fetch_verl_source.sh --verify           # installed verl == the pin
 ```
 
 `GROUP_SIZE=32` forces the group size; `TAG=__g32` suffixes the experiment name
@@ -122,6 +141,26 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
   A cron job strips the shards, which also removes the only way to resume — a
   deliberate trade, given `resume_mode=disable`. ZFS accounting lags deletions by
   minutes, so a `df` right after `rm` is not the truth.
+
+## Things the refactor settled
+
+- **`outputs/` is a symlink to the shared bucket.** All three nodes read and
+  write one set of results. Cross-node visibility is eventual - a file written
+  on one node takes minutes to appear on another - but same-node
+  read-after-write is immediate, which is what the evaluation loops rely on.
+  Checkpoints stay node-local: 26 GB per run over a fuse mount buys nothing.
+- **There is no `--task`.** A benchmark is a data file plus how to sample and
+  grade it, which is what a config holds. `--data` takes any path, so a pipeline
+  can evaluate data it wrote a moment ago without registering anything - the
+  teacher loop used to synthesise a config per step to get around this.
+- **Generations are written unconditionally**, beside the summary and records.
+  The flag was missed on all 141 checkpoint evaluations in the study and the
+  checkpoints were then deleted, so those traces do not exist.
+- **The output tag follows the weights.** `--model <ckpt>` under a base model's
+  config produces `<exp>__step<N>__<label>`, so a checkpoint cannot overwrite the
+  baseline it is being compared against.
+- **macOS `tar` packs AppleDouble twins.** Copying results to a node from a Mac
+  doubled the file count with 163-byte `._*` files. Use `COPYFILE_DISABLE=1`.
 
 ## Reporting conventions
 
