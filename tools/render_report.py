@@ -52,6 +52,59 @@ W, H = 300, 190
 PAD_L, PAD_R, PAD_T, PAD_B = 46, 16, 14, 30
 
 
+def leak_panel(series, task, cfg):
+    """Two lines for one teacher run: the fifth it could see, and the rest.
+
+    Both come from the SAME four full-benchmark evaluations, split by the
+    manifest's id list -- same checkpoints, same sample counts, same grader, so
+    the only difference between the lines is which problems they are computed
+    over. The per-step reference tests run at a finer cadence but cover only the
+    seen fifth, so they cannot make this comparison.
+
+    A curriculum that exploited what the teacher read there would push the seen
+    line above the held-out one and keep it there.
+    """
+    row = next((s for s in series if s["config"] == cfg and s["task"] == task
+                and s["band"] == "teacher"), None)
+    if not row:
+        return '<div class="panel empty">no teacher run yet</div>'
+    lines = {w: [(p["rollouts"], p[w] * 100) for p in row["points"]
+                 if p.get(w) is not None] for w in ("held_out", "seen")}
+    ys = [y for v in lines.values() for _, y in v]
+    if not ys:
+        return '<div class="panel empty">no teacher run yet</div>'
+    lo, hi = min(ys), max(ys)
+    span = max(hi - lo, 2.0)
+    lo, hi = lo - span * 0.25, hi + span * 0.25
+    X = lambda v: PAD_L + (v / 10240) * (W - PAD_L - PAD_R)
+    Y = lambda v: PAD_T + (1 - (v - lo) / (hi - lo)) * (H - PAD_T - PAD_B)
+
+    out = [f'<svg viewBox="0 0 {W} {H}" role="img" '
+           f'aria-label="{cfg} on {task}: seen fifth against held-out">']
+    for i in range(4):
+        v = lo + (hi - lo) * i / 3
+        out.append(f'<line class="grid" x1="{PAD_L}" y1="{Y(v):.1f}" '
+                   f'x2="{W-PAD_R}" y2="{Y(v):.1f}"/>')
+        out.append(f'<text class="tick" x="{PAD_L-6}" y="{Y(v)+3:.1f}" '
+                   f'text-anchor="end">{v:.0f}</text>')
+    for xv in (0, 5120, 10240):
+        out.append(f'<text class="tick" x="{X(xv):.1f}" y="{H-10}" '
+                   f'text-anchor="middle">{xv//1000 if xv else 0}{"k" if xv else ""}</text>')
+    for which, cls in (("held_out", "sH"), ("seen", "sS")):
+        pts = lines[which]
+        if len(pts) < 2:
+            continue
+        d = " ".join(f'{"M" if i == 0 else "L"}{X(x):.1f},{Y(y):.1f}'
+                     for i, (x, y) in enumerate(pts))
+        out.append(f'<path class="line {cls}" d="{d}"/>')
+        for x, y in pts:
+            out.append(f'<circle class="dot {cls}" cx="{X(x):.1f}" cy="{Y(y):.1f}" r="3.2">'
+                       f'<title>{"held-out 4/5" if which=="held_out" else "seen 1/5"}'
+                       f' · {x:,} rollouts · {y:.1f}%</title></circle>')
+    out.append("</svg>")
+    return '<div class="panel">' + "".join(out) + "</div>"
+
+
 def role_of(band):
     for slugs, role, _ in BANDS:
         if band in slugs:
@@ -64,7 +117,7 @@ def slot_of(role):
             "teacher": "T"}[role]
 
 
-def panel(series, task, cfg, teacher=False):
+def panel(series, task, cfg, teacher=False, field="score"):
     """One SVG panel: every band of one configuration on one benchmark.
 
     Every band is a solid line. p=0 and p=1 used to be dotted, marking them as
@@ -91,7 +144,8 @@ def panel(series, task, cfg, teacher=False):
     if not rows:
         return f'<div class="panel empty">no data</div>'
 
-    ys = [p["score"] * 100 for s in rows for p in s["points"] if p["score"] is not None]
+    ys = [p[field] * 100 for s in rows for p in s["points"]
+          if p.get(field) is not None]
     if not ys:
         return f'<div class="panel empty">no data</div>'
     lo, hi = min(ys), max(ys)
@@ -105,8 +159,8 @@ def panel(series, task, cfg, teacher=False):
     def Y(v):
         return PAD_T + (1 - (v - lo) / (hi - lo)) * (H - PAD_T - PAD_B)
 
-    base = next((p["score"] * 100 for s in rows for p in s["points"]
-                 if p["rollouts"] == 0 and p["score"] is not None), None)
+    base = next((p[field] * 100 for s in rows for p in s["points"]
+                 if p["rollouts"] == 0 and p.get(field) is not None), None)
 
     out = [f'<svg viewBox="0 0 {W} {H}" role="img" '
            f'aria-label="{cfg} on {task}" preserveAspectRatio="xMidYMid meet">']
@@ -128,8 +182,8 @@ def panel(series, task, cfg, teacher=False):
     for s in rows:
         role = role_of(s["band"])
         slot = slot_of(role)
-        pts = [(p["rollouts"], p["score"] * 100) for p in s["points"]
-               if p["score"] is not None]
+        pts = [(p["rollouts"], p[field] * 100) for p in s["points"]
+               if p.get(field) is not None]
         if len(pts) < 2:
             continue
         d = " ".join(f'{"M" if i == 0 else "L"}{X(x):.1f},{Y(y):.1f}'
@@ -189,6 +243,8 @@ def main():
     ap.add_argument("--curves", default=str(ROOT / "outputs" / "analysis" / "curves.json"))
     ap.add_argument("--out", default=str(ROOT / "outputs" / "report.html"))
     ap.add_argument("--stats", default="", help="optional JSON of paired results")
+    ap.add_argument("--holdout", default=None,
+                    help="the held-out / seen split from tools/holdout_split.py")
     a = ap.parse_args()
 
     doc = json.loads(Path(a.curves).read_text())
@@ -201,20 +257,52 @@ def main():
     if stats_path.exists():
         for r in json.loads(stats_path.read_text()):
             stats[(r["config"], r["band"], r["variant"], r["task"], r["metric"])] = r
+    # The reference fifth is visible to the teacher and to nothing else, so
+    # section 2 has to read every curve on the four fifths it could not see.
+    # holdout_split.py recomputes that from the per-problem records.
+    hpath = Path(a.holdout) if a.holdout else ROOT / "outputs" / "analysis" / "holdout.json"
+    hold = {}
+    if hpath.exists():
+        for model, rows in json.loads(hpath.read_text()).items():
+            for r in rows:
+                band = ("teacher" if r["curriculum"] == "TEACHER"
+                        else r["curriculum"].split("__")[0])
+                var = "g32" if r["curriculum"].endswith("__g32") else ""
+                for which in ("held_out", "seen"):
+                    if r[which]:
+                        hold[(model, band, var, r["task"], r["rollouts"], which)] = \
+                            r[which]["score"]
+    for x in series:
+        for pt in x["points"]:
+            for which in ("held_out", "seen"):
+                k = (x["config"], x["band"], x.get("variant") or "",
+                     x["task"], pt["rollouts"], which)
+                pt[which] = hold.get(k)
+
     body = Path(str(ROOT / "tools" / "report_template.html")).read_text()
 
-    def build_grid(with_teacher):
+    def build_grid(with_teacher, field="score"):
         g = []
         for tkey, tname, metric, kind in TASKS:
             g.append(f'<div class="rowlab"><span class="tname">{tname}</span>'
                      f'<span class="tmetric">{metric}</span>'
                      f'<span class="tkind">{kind}</span></div>')
             for ckey, cname, _ in CONFIGS:
-                g.append(panel(series, tkey, ckey, teacher=with_teacher))
+                g.append(panel(series, tkey, ckey, teacher=with_teacher, field=field))
         return "\n".join(g)
 
     body = body.replace("<!--GRID-->", build_grid(False))
-    body = body.replace("<!--GRID_TEACHER-->", build_grid(True))
+    body = body.replace("<!--GRID_TEACHER-->", build_grid(True, field="held_out"))
+
+    leak = []
+    for tkey, tname, metric, kind in TASKS:
+        leak.append(f'<div class="rowlab"><span class="tname">{tname}</span>'
+                    f'<span class="tmetric">{metric}</span>'
+                    f'<span class="tkind">{kind}</span></div>')
+        for ckey, _, _ in CONFIGS:
+            leak.append(leak_panel(series, tkey, ckey))
+    body = body.replace("<!--GRID_LEAK-->", "\n".join(leak))
+    body = body.replace("<!--COLHEADS_3-->", heads)
     # Say which configurations have a teacher run rather than letting a missing
     # line read as a flat one.
     have = sorted({x["config"] for x in series if x["band"] == "teacher"})

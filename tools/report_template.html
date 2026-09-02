@@ -8,7 +8,7 @@
   --ink:#12131a; --ink-2:#4e5261; --ink-3:#7b8095;
   --rule:#dcdfe7; --rule-2:#c3c8d4;
   --s0:#5b6478; --s1:#eb6834; --s2:#1baf7a; --s3:#4a3aa7; --s4:#a8afbd;
-  --sT:#b0217a;
+  --sT:#b0217a; --sH:#1f6f8b; --sS:#c8791a;
   --accent:#4a3aa7;
   --shadow:0 1px 2px rgba(18,19,26,.05),0 8px 24px -12px rgba(18,19,26,.18);
 }
@@ -18,7 +18,7 @@
     --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
     --rule:#2e2e33; --rule-2:#3d3d44;
     --s0:#a8afbd; --s1:#d95926; --s2:#199e70; --s3:#9085e9; --s4:#5b6478;
-    --sT:#f06fb4;
+    --sT:#f06fb4; --sH:#63b8d4; --sS:#e8a84a;
     --accent:#9085e9;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
   }
@@ -28,7 +28,7 @@
   --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
   --rule:#2e2e33; --rule-2:#3d3d44;
   --s0:#a8afbd; --s1:#d95926; --s2:#199e70; --s3:#9085e9; --s4:#5b6478;
-  --sT:#f06fb4;
+  --sT:#f06fb4; --sH:#63b8d4; --sS:#e8a84a;
   --accent:#9085e9;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
 }
@@ -120,6 +120,9 @@ text.endlab.ctx{opacity:.5;font-weight:500}
 .s2{stroke:var(--s2)} circle.s2{fill:var(--s2)} text.s2{fill:var(--s2);stroke:none}
 .s3{stroke:var(--s3)} circle.s3{fill:var(--s3)} text.s3{fill:var(--s3);stroke:none}
 .s4{stroke:var(--s4)} circle.s4{fill:var(--s4)} text.s4{fill:var(--s4);stroke:none}
+.sH{stroke:var(--sH);stroke-width:2.6} circle.sH{fill:var(--sH)}
+.sS{stroke:var(--sS);stroke-width:2.6;stroke-dasharray:5 3} circle.sS{fill:var(--sS)}
+.kH .swatch{background:var(--sH)} .kS .swatch{background:var(--sS)}
 .sT{stroke:var(--sT);stroke-width:3.1} circle.sT{fill:var(--sT);r:3.9}
 text.sT{fill:var(--sT);stroke:none}
 
@@ -200,6 +203,12 @@ no teacher: the control that a teacher-side method has to beat.</p>
   and never saw these curves. Everything else — student, group size, batch size,
   sampling, GPU count — is identical to the bands above, so the problems are the
   only thing that differs. <!--TEACHER_STATUS--></p>
+<p class="seclede"><strong>Every curve here is scored on the four fifths of each
+  benchmark the teacher could not see.</strong> The per-step reference tests are
+  the other fifth, and their problems and the student's full generations on them
+  land in the run directory the teacher reads &mdash; it did read them. The bands
+  never had that channel, so scoring the whole benchmark would compare them on
+  unequal terms. Section 3 measures whether the leak was used.</p>
 
 <div class="legend">
   <span class="key kT"><i class="swatch"></i> teacher — curriculum written per step</span>
@@ -210,6 +219,27 @@ no teacher: the control that a teacher-side method has to beat.</p>
   <div class="colheads"><div class="colhead"></div><!--COLHEADS_2--></div>
   <div class="grid"><!--GRID_TEACHER--></div>
 </div>
+
+<h2 class="sec">3 &middot; Did the teacher use what it could see?</h2>
+<p class="seclede">Two lines per panel, from the <em>same</em> four evaluations of
+  the same checkpoints, split only by which problems they are computed over: the
+  fifth the teacher could read in the run directory, and the four fifths it could
+  not. Same sample counts, same grader. A curriculum drawn from what it saw would
+  push the seen line above the held-out one and keep it there.</p>
+
+<div class="legend">
+  <span class="key kH"><i class="swatch"></i> held-out 4/5 — never visible to the teacher</span>
+  <span class="key kS"><i class="swatch"></i> seen 1/5 — the per-step reference set</span>
+</div>
+
+<div class="gridwrap">
+  <div class="colheads"><div class="colhead"></div><!--COLHEADS_3--></div>
+  <div class="grid"><!--GRID_LEAK--></div>
+</div>
+<p style="font-size:13px;color:var(--ink-3);margin-top:10px">
+  The seen fifth is 100 / 30 / 19 problems, so its line is much noisier than the
+  held-out one — on HMMT a single problem is over five points. Read the two
+  lines' <em>separation</em>, not either one's wobble.</p>
 
 <h2>What the panels show</h2>
 <!--FINDINGS-->
