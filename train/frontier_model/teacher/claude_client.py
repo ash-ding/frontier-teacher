@@ -7,7 +7,8 @@ os.environ or credential contents.
 
 Verified against the installed CLI (claude 2.1.258) rather than the spec:
   * `--max-turns` DOES NOT EXIST in this version. The runaway-loop guard is a
-    per-turn wall-clock timeout plus an optional `--max-budget-usd` cost ceiling.
+    per-turn wall-clock timeout. The claude CLI has no turn cap, so that timeout is
+    the only guard against a turn that will not end.
   * the system prompt is passed as a STRING via `--append-system-prompt` (the
     `-file` variant is undocumented here; passing the string is guaranteed).
   * `--permission-mode acceptEdits` is REQUIRED for the Write tool to run
