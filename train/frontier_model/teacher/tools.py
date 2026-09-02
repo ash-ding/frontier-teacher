@@ -235,7 +235,7 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
 
     `step_dir` is this eval sub-action's own dir (step_<N>/eval_<M>/). Reuses
     evaluate.py unmodified: `--limit 0` (uncapped); generations are always saved,
-    `--out step_dir`, tagged teacher_step<N>_eval<M>. Copies the tag-named
+    `--output-path step_dir`. Copies the
     summary/records to the canonical eval.summary.json / eval.records.jsonl in the
     sub-action dir. Returns a dict of eval stats (weights unchanged).
     """
@@ -253,7 +253,6 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
     argv = [
         "python", str(EVAL_DIR / "evaluate.py"),
         "--model", str(model_path),
-        "--model-label", name,
         "--data", str(step_data),
         "--label", "teacher_eval",
         "--samples", str(tmpl.get("n", 4)),
@@ -264,7 +263,7 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
         "--top-p", str(base.get("top_p", 0.9)),
         "--top-k", str(base.get("top_k", -1)),
         "--limit", "0",
-        "--out", str(step_dir),
+        "--output-path", str(step_dir),
     ]
     rc, timed_out, wall = _stream(argv, step_dir / "eval.log", cwd=str(repo_root),
                                   timeout_s=timeout_s)

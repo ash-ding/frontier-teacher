@@ -8,8 +8,11 @@ Rollout count is derived from the checkpoint step: every run consumes 512
 rollouts per step by construction, which is what puts all nine curves on a
 common x-axis.
 
-  baseline (step 0)  outputs/{config}__{task}.summary.json
-  checkpoints        outputs/{config}__{band}__step{N}__{task}.summary.json
+  baseline (step 0)  outputs/benchmarks/{config}__{task}/summary.json
+  checkpoints        outputs/grpo/{config}__{band}__step{N}__{task}/summary.json
+
+Identity comes from the directory name, not a filename: one evaluation is one
+directory holding summary.json, records.jsonl and generations.jsonl.
 """
 import argparse
 import json
@@ -32,9 +35,13 @@ HEADLINE = {"math500": "pass@1", "aime": "pass@4", "hmmt": "pass@4"}
 # them simply fails to match - the run then falls through to BASE, whose cfg
 # group DOES admit underscores, and every checkpoint of that run is silently
 # filed as a baseline. Anchoring BASE against __step is what stops that.
+# The band group must be lazy up to __step: band slugs contain underscores of
+# their own (pass1_eq_0), and a class that excludes them fails to match, sending
+# the run to BASE - whose cfg group does admit them - so every checkpoint of that
+# run is silently filed as a baseline.
 CKPT = re.compile(r"^(?P<cfg>.+?)__(?P<band>pass1_.+?)(?:__(?P<variant>g\d+))?"
-                  r"__step(?P<step>\d+)__(?P<task>\w+)\.summary\.json$")
-BASE = re.compile(r"^(?P<cfg>[\w.-]+?)__(?P<task>math500|aime|hmmt)\.summary\.json$")
+                  r"__step(?P<step>\d+)__(?P<task>\w+)$")
+BASE = re.compile(r"^(?P<cfg>[\w.-]+?)__(?P<task>math500|aime|hmmt)$")
 
 
 def main():
@@ -46,15 +53,12 @@ def main():
     outdir = Path(a.outputs)
     baselines, points = {}, defaultdict(list)
 
-    for p in sorted(outdir.glob("*.summary.json")):
-        s = json.loads(p.read_text())
-        m = CKPT.match(p.name)
+    for f in sorted(outdir.glob("*/*/summary.json")):
+        s = json.loads(f.read_text())
+        name = f.parent.name
+        m = CKPT.match(name)
         if m:
             task = m["task"]
-            # A sharded evaluation writes {tag}__{task}__sNofM.summary.json until
-            # it merges, and \w+ swallows the shard suffix into the task name.
-            # Those files hold one eighth of the problems; plotting one as a
-            # panel value would be wrong, not merely noisy.
             if task not in HEADLINE:
                 continue
             metric = HEADLINE[task]
@@ -69,8 +73,8 @@ def main():
                 "mean_gen_tokens": s.get("mean_gen_tokens"),
             })
             continue
-        b = BASE.match(p.name)
-        if b and "__step" not in p.name and "pass1_" not in p.name:
+        b = BASE.match(name)
+        if b and "__step" not in name and "pass1_" not in name:
             task = b["task"]
             baselines[(b["cfg"], task)] = {
                 "rollouts": 0,

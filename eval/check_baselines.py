@@ -13,7 +13,7 @@ import json, glob, os, re, sys, collections
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "outputs"
 TASKS = ("math500", "aime", "hmmt")
-CKPT = re.compile(r"^(?P<cfg>.+?)__pass1_[^_]+(?:__g\d+)?__step\d+__(?P<task>\w+)\.records\.jsonl$")
+CKPT = re.compile(r"^(?P<cfg>.+?)__pass1_.+?(?:__g\d+)?__step\d+__(?P<task>\w+)$")
 
 def first_id(p):
     with open(p) as f:
@@ -21,17 +21,15 @@ def first_id(p):
 
 # what the checkpoint evaluations actually emit, per task
 seen = collections.defaultdict(set)
-for p in glob.glob(os.path.join(OUT, "*__step*__*.records.jsonl")):
-    m = CKPT.match(os.path.basename(p))
+for p in glob.glob(os.path.join(OUT, "grpo", "*", "records.jsonl")):
+    m = CKPT.match(os.path.basename(os.path.dirname(p)))
     if m and m["task"] in TASKS:
         seen[m["task"]].add(first_id(p))
 
 bad = 0
-for p in sorted(glob.glob(os.path.join(OUT, "*.records.jsonl"))):
-    b = os.path.basename(p)
-    if "__step" in b or "__s" in b.split("__")[-1]:
-        continue
-    task = b.rsplit("__", 1)[-1].replace(".records.jsonl", "")
+for p in sorted(glob.glob(os.path.join(OUT, "benchmarks", "*", "records.jsonl"))):
+    b = os.path.basename(os.path.dirname(p))
+    task = b.rsplit("__", 1)[-1]
     if task not in TASKS or not seen.get(task):
         continue
     fid = first_id(p)

@@ -17,8 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 HEADLINE = {"math500": "pass@1", "aime": "pass@4", "hmmt": "pass@4"}
 KS = {"pass@1": 1, "pass@4": 4}
 # lazy up to __step: band slugs contain underscores (pass1_eq_0, pass1_eq_1)
+# lazy up to __step: band slugs contain underscores (pass1_eq_0, pass1_eq_1)
 CKPT = re.compile(r"^(?P<cfg>.+?)__(?P<band>pass1_.+?)(?:__(?P<variant>g\d+))?"
-                  r"__step(?P<step>\d+)__(?P<task>\w+)\.records\.jsonl$")
+                  r"__step(?P<step>\d+)__(?P<task>\w+)$")
 
 
 def pak(n, c, k):
@@ -50,16 +51,16 @@ def main():
     out_dir = Path(a.outputs)
 
     runs = {}
-    for p in out_dir.glob("*__step*__*.records.jsonl"):
-        m = CKPT.match(p.name)
+    for f in out_dir.glob("grpo/*/records.jsonl"):
+        m = CKPT.match(f.parent.name)
         if not m or m["task"] not in HEADLINE:
             continue
         key = (m["cfg"], m["band"], m["variant"] or "", m["task"])
-        runs.setdefault(key, {})[int(m["step"])] = str(p)
+        runs.setdefault(key, {})[int(m["step"])] = str(f)
 
     results = []
     for (cfg, band, variant, task), steps in sorted(runs.items()):
-        base = load(str(out_dir / f"{cfg}__{task}.records.jsonl"))
+        base = load(str(out_dir / "benchmarks" / f"{cfg}__{task}" / "records.jsonl"))
         last = max(steps)
         end = load(steps[last])
         if not base or not end:

@@ -31,10 +31,17 @@ Removing the lookup is what lets a pipeline evaluate data it has just written:
 --data takes any path, resolved against the working directory rather than data/,
 so nothing has to be registered first.
 
-  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml
-  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml --model <ckpt-dir>
+  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml \
+                          --output-path outputs/benchmarks/llama32-3b__aime
+  python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml \
+                          --model <ckpt-dir> --output-path outputs/grpo/<exp>__step20__aime
   python eval/evaluate.py --model Qwen/Qwen3-4B --data /abs/step7/data.jsonl \
-                          --label teacher_step7 --verifier symbolic --samples 4
+                          --verifier symbolic --samples 4 --output-path <step-dir>
+
+Output is three files in --output-path: summary.json, records.jsonl,
+generations.jsonl. One run, one directory. Whether two runs collide is decided
+by the directory the caller names, not by a filename the script derives - the
+latter meant a forgotten flag could overwrite a baseline with a checkpoint.
 """
 from __future__ import annotations
 
@@ -67,9 +74,7 @@ DEFAULTS = {
     "gpu_memory_utilization": 0.90,
     "verifier": "symbolic",       # AIME is the only benchmark that is not
     "enable_thinking": None,      # absent, not false: Llama's template rejects it
-    "out_subdir": "",
     "headline_metric": None,
-    "model_label": None,      # short name for the model in output tags
 }
 
 
@@ -89,20 +94,17 @@ def build_args():
                         "working directory. Nothing is resolved under data/, so a "
                         "pipeline evaluating data it just generated needs no "
                         "registration and no symlink.")
-    g.add_argument("--out", default=None, help="output directory (default: outputs/)")
+    g.add_argument("--output-path", default=None,
+                   help="directory for this run's three files. One run, one "
+                        "directory: naming is the caller's, so nothing can "
+                        "collide by accident.")
     g.add_argument("--label", default=None,
-                   help="short name for what is being evaluated, e.g. aime. Forms "
-                        "the second half of the output tag.")
+                   help="what is being evaluated, e.g. aime. Recorded in the "
+                        "summary; defaults to the first data file's stem.")
     g.add_argument("--model", default=None,
                    help="what to evaluate: a HuggingFace id, or a checkpoint "
                         "directory. A checkpoint is a model; there is no separate "
                         "flag for one.")
-    g.add_argument("--model-label", default=None,
-                   help="short name for the model in output tags, e.g. qwen3-4b-think; "
-                        "defaults to the last path component of --model")
-    g.add_argument("--name", default=None,
-                   help="output tag. Derived from --model and --label when omitted, so "
-                        "a checkpoint cannot overwrite a baseline.")
 
     g = ap.add_argument_group("sampling - model-specific, defaults from the config")
     g.add_argument("--samples", type=int, default=None,
@@ -125,32 +127,6 @@ def build_args():
     g.add_argument("--gpu-memory-utilization", type=float, default=None)
     g.add_argument("--limit", type=int, default=0, help="debug: first N problems only")
     return ap.parse_args()
-
-
-def resolve_name(args, R):
-    """The output tag: <what was evaluated>__<label of the data>.
-
-    `name` forms the filename, so two runs sharing one overwrite each other.
-    Evaluating a checkpoint under a base model's config and forgetting to rename
-    would replace that model's baseline - the rollout-0 anchor every curve and
-    every paired comparison is measured against - with a checkpoint's score, and
-    nothing would warn you. So the name follows the model actually loaded:
-
-        unsloth/Llama-3.2-3B-Instruct                       -> llama32-3b__aime
-        .../llama32-3b__pass1_05-15pct/global_step_20/...   -> llama32-3b__pass1_05-15pct__step20__aime
-
-    model_label names the first half when the model is a released id; a
-    checkpoint path names itself, from the experiment and step in it.
-    """
-    if args.name:
-        return args.name
-    parts = Path(R["model"]).expanduser().parts
-    step = next((p for p in reversed(parts) if p.startswith("global_step_")), None)
-    if step:
-        subject = f"{parts[parts.index(step) - 1]}__step{step.rsplit('_', 1)[1]}"
-    else:
-        subject = R.get("model_label") or Path(R["model"]).name
-    return f"{subject}__{R['label']}"
 
 
 def resolve(args):
@@ -177,14 +153,13 @@ def resolve(args):
         "top_p": args.top_p, "top_k": args.top_k,
         "gpu_memory_utilization": args.gpu_memory_utilization,
         "verifier": args.verifier, "model": args.model, "label": args.label,
-        "model_label": args.model_label,
         "data": args.data,
         "enable_thinking": None if args.thinking is None else args.thinking == "true",
     }
     cli = {k: v for k, v in cli.items() if v is not None}
 
     R = {**DEFAULTS, **cfg, **cli}
-    for req in ("model", "data", "label"):
+    for req in ("model", "data"):
         if not R.get(req):
             raise SystemExit(
                 f"{req!r} is not set. Give --{req} on the command line, or set "
@@ -192,7 +167,8 @@ def resolve(args):
 
     R["data_files"] = [Path(p).expanduser().resolve()
                        for p in ([R["data"]] if isinstance(R["data"], str) else R["data"])]
-    R["name"] = resolve_name(args, R)
+    if not R.get("label"):
+        R["label"] = R["data_files"][0].stem
     R["_sources"] = {k: ("command line" if k in cli else
                          "config" if k in cfg else "default")
                      for k in sorted(set(DEFAULTS) | set(cfg) | set(cli))}
@@ -220,42 +196,18 @@ def main():
     if not rows:
         raise SystemExit("no problems selected")
 
-    tag = R["name"]
-    if args.num_shards > 1:
-        tag += f"__s{args.shard}of{args.num_shards}"
-    verifier = get_verifier(R["verifier"])
-
-    from transformers import AutoTokenizer
-    from vllm import LLM, SamplingParams
-
-    tok = AutoTokenizer.from_pretrained(R["model"])
-    tkw = {} if R["enable_thinking"] is None else {"enable_thinking": R["enable_thinking"]}
-    prompts = [tok.apply_chat_template(
-        [{"role": "user", "content": PROMPT.format(problem=r["problem"])}],
-        tokenize=False, add_generation_prompt=True, **tkw) for r in rows]
-
-    llm = LLM(model=R["model"], tensor_parallel_size=R["tensor_parallel_size"],
-              gpu_memory_utilization=R["gpu_memory_utilization"],
-              max_model_len=R["max_model_len"], dtype="bfloat16", seed=R["seed"],
-              enforce_eager=False, trust_remote_code=True)
-    sp = SamplingParams(n=R["samples"], temperature=R["temperature"], top_p=R["top_p"],
-                        top_k=R["top_k"], max_tokens=R["max_tokens"], seed=R["seed"])
-
-    t0 = time.time()
-    outs = llm.generate(prompts, sp)
-    gen_s = time.time() - t0
-
-    # Summary, per-problem records and raw generations all land in one place.
-    # A separate generations/ tree meant three directories had to be kept in
-    # step by hand, and the traces for a run were one directory away from the
-    # numbers that summarise them.
-    outdir = (Path(args.out) if args.out else ROOT / "outputs") / R["out_subdir"]
+    # One run, one directory, three fixed names. The caller chooses the
+    # directory, which is the only thing that decides whether two runs collide -
+    # a decision that used to be made by deriving a filename, where forgetting a
+    # flag could overwrite a baseline with a checkpoint's score.
+    outdir = Path(args.output_path) if args.output_path else ROOT / "outputs"
     outdir.mkdir(parents=True, exist_ok=True)
+    stem = "" if args.num_shards == 1 else f".s{args.shard}of{args.num_shards}"
 
     records = []
     # Generations are written as they are produced, not buffered to the end: a
     # shard killed mid-run has cost a 12%-complete evaluation before.
-    with (outdir / f"{tag}.generations.jsonl").open("w") as genf:
+    with (outdir / f"generations{stem}.jsonl").open("w") as genf:
         for row, out in zip(rows, outs):
             per_sample = []
             for si, comp in enumerate(out.outputs):
@@ -271,7 +223,7 @@ def main():
                             "samples": per_sample})
 
     summary = summarize(records, extra={
-        "tag": tag, "label": R["label"], "model": R["model"],
+        "label": R["label"], "model": R["model"],
         "profile_model": R["model"],
         "verifier": R["verifier"], "gen_seconds": gen_s,
         "sampling": {k: R[k] for k in ("temperature", "top_p", "top_k",
@@ -281,8 +233,8 @@ def main():
         "data_files": [str(p) for p in R["data_files"]],
         "headline_metric": R["headline_metric"],
     })
-    (outdir / f"{tag}.summary.json").write_text(json.dumps(summary, indent=2))
-    with (outdir / f"{tag}.records.jsonl").open("w") as f:
+    (outdir / f"summary{stem}.json").write_text(json.dumps(summary, indent=2))
+    with (outdir / f"records{stem}.jsonl").open("w") as f:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
@@ -293,7 +245,7 @@ def main():
     src = R.get("_sources", {})
     shown = ("model", "label", "samples", "verifier", "temperature", "top_p",
              "top_k", "max_tokens", "max_model_len", "enable_thinking")
-    print(f"{tag}  ({len(records)} problems)")
+    print(f"{outdir}  ({len(records)} problems)")
     for k in shown:
         if k in R:
             print(f"    {k:18} {str(R[k]):<44} [{src.get(k, 'default')}]")
@@ -301,8 +253,7 @@ def main():
     print(f"  headline {head}={100*summary.get(head, float('nan')):.1f}"
           f"  truncated={100*summary['truncation_rate']:.1f}%"
           f"  no_answer={100*summary['no_answer_rate']:.1f}%")
-    print(f"  -> {outdir}/{tag}.summary.json + .records.jsonl")
-    print(f"  -> {outdir}/{tag}.generations.jsonl")
+    print(f"  -> summary{stem}.json  records{stem}.jsonl  generations{stem}.jsonl")
 
 
 if __name__ == "__main__":

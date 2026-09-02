@@ -16,9 +16,10 @@ N=8
 for i in $(seq 0 $((N-1))); do
   CUDA_VISIBLE_DEVICES=$i VLLM_LOGGING_LEVEL=WARNING \
     nohup python eval/evaluate.py --config "configs/eval/${CFG}__${TASK}.yaml" \
+      --output-path "outputs/math_profiling/${CFG}__${TASK}" \
       --shard "$i" --num-shards "$N" \
       > "logs/${CFG}__${TASK}__s${i}.log" 2>&1 &
   echo "  gpu $i  shard $i/$N  pid $!"
 done
 echo "launched $N shards for ${CFG}/${TASK}"
-echo "merge when done:  python eval/merge_shards.py --config configs/eval/${CFG}__${TASK}.yaml"
+echo "merge when done:  python eval/merge_shards.py --output-path outputs/math_profiling/${CFG}__${TASK}"
