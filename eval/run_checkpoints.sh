@@ -5,6 +5,14 @@
 #
 #   eval/run_checkpoints.sh <config-name> <band-slug> [n_gpus]
 #
+# CKROOT and OUTROOT override where it looks and where it writes, which is how a
+# teacher run is evaluated: its checkpoints are one directory deeper and are all
+# named global_step_1, so the step number comes from the run's own step_<N>/.
+#
+#   CKROOT=$PWD/.local_checkpoints/run_<ts> \
+#   OUTROOT=outputs/frontier-model/run_<ts>/final_eval \
+#     eval/run_checkpoints.sh llama32-3b teacher 8
+#
 # Each job gets its own output directory, which is what keeps a checkpoint's
 # score from landing on top of the baseline it is compared against.
 #
@@ -28,7 +36,8 @@ esac
 EXP="${CFG}__${BAND}${TAG:-}"
 # Checkpoints are node-local: outputs/ is a symlink to the shared bucket, and
 # 26 GB of weights per checkpoint has no business crossing a fuse mount.
-CKROOT="$REPO/.local_checkpoints/$EXP"
+CKROOT="${CKROOT:-$REPO/.local_checkpoints/$EXP}"
+OUTROOT="${OUTROOT:-outputs/grpo}"
 TASKS="math500 aime hmmt"
 mkdir -p logs
 [ -d "$CKROOT" ] || { echo "no checkpoints at $CKROOT"; exit 1; }
@@ -70,14 +79,23 @@ run_job () {   # gpu step task ckpt-dir
 }
 
 JOBS=()
-for d in "$CKROOT"/global_step_*/actor/huggingface; do
+# Two layouts: a GRPO run keeps global_step_<N>/ side by side; a teacher run
+# gives each step its own step_<N>/ and calls the checkpoint inside it
+# global_step_1. Take the step number from step_<N>/ when it is there.
+for d in "$CKROOT"/global_step_*/actor/huggingface \
+         "$CKROOT"/step_*/global_step_*/actor/huggingface; do
   [ -f "$d/config.json" ] || continue
-  step=$(echo "$d" | sed -E 's|.*/global_step_([0-9]+)/.*|\1|')
+  case "$d" in
+    */step_*/global_step_*) step=$(echo "$d" | sed -E 's|.*/step_([0-9]+)/global_step_.*|\1|') ;;
+    *)                      step=$(echo "$d" | sed -E 's|.*/global_step_([0-9]+)/.*|\1|') ;;
+  esac
   for t in $TASKS; do JOBS+=("$step $t $d"); done
 done
-echo "=== $EXP: ${#JOBS[@]} eval jobs across $NGPU GPUs ==="
+echo "=== $EXP: ${#JOBS[@]} eval jobs across $NGPU GPUs"
+echo "    checkpoints from $CKROOT"
+echo "    results to      $OUTROOT ==="
 
-done_count () { ls -d outputs/grpo/${EXP}__step*/summary.json 2>/dev/null | wc -l; }
+done_count () { ls -d ${OUTROOT}/${EXP}__step*/summary.json 2>/dev/null | wc -l; }
 
 # Two passes: a job that failed on a busy GPU leaves no summary, and the second
 # pass picks it up while finished jobs are skipped.
