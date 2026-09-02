@@ -42,6 +42,24 @@ body{
 h1,h2,h3,.lab,th,.colhead,.rowlab,.legend,.tick,.endlab{
   font-family:Archivo,"Helvetica Neue",Arial,sans-serif;
 }
+.diagram{background:var(--surface);border:1px solid var(--rule);border-radius:3px;
+  padding:14px 10px;margin:22px 0 0;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:700px;height:auto}
+.diagram .box{fill:var(--surface-2);stroke:var(--rule-2);stroke-width:1}
+.diagram .box.teach{stroke:var(--sT);stroke-width:1.6}
+.diagram .box.auto{stroke:var(--sS);stroke-dasharray:4 3}
+.diagram .frozen{fill:none;stroke:var(--rule-2);stroke-width:1;stroke-dasharray:3 3}
+.diagram .edge{stroke:var(--ink-3);stroke-width:1.4;fill:none}
+.diagram .edge.t{stroke:var(--sT)}
+.diagram .edge.back{stroke-dasharray:5 3}
+.diagram .af{fill:var(--ink-3)} .diagram .afT{fill:var(--sT)}
+.diagram .dlab{font-family:Archivo,sans-serif;font-size:12.5px;font-weight:700;
+  letter-spacing:.06em;fill:var(--ink)}
+.diagram .dsm{font-family:Archivo,sans-serif;font-size:11px;fill:var(--ink-2)}
+.diagram .dmono{font-family:"IBM Plex Mono",monospace;font-size:10.5px}
+.diagram .dim{fill:var(--ink-3)}
+.diagram .tch{fill:var(--sT)} .diagram .sn{fill:var(--sS)}
+.diagram .frz{fill:var(--ink-3);letter-spacing:.1em}
 h2.sec{font-size:23px;font-weight:700;letter-spacing:-.012em;margin:52px 0 6px;
   padding-top:26px;border-top:1px solid var(--rule)}
 p.seclede{font-size:15.5px;color:var(--ink-2);max-width:74ch;margin:0 0 22px;
@@ -196,6 +214,73 @@ no teacher: the control that a teacher-side method has to beat.</p>
   three models sit at very different absolute levels, and a shared axis would
   flatten every curve into a line. Compare <em>within</em> a panel; read across
   panels using the labelled change from baseline.</p>
+
+
+<h2 class="sec">The loop that wrote the second curriculum</h2>
+<p class="seclede">One step is one GRPO update. Inside a step the teacher may
+  evaluate the student as often as it likes — each evaluation measures the same
+  weights and returns to it — and the step closes only when it decides to train.
+  Everything except the problems is settled before the run starts.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 880 356" role="img" aria-label="The teacher-in-the-loop pipeline: a frozen configuration constrains a repeating cycle in which the teacher writes problems, the orchestrator either evaluates the current checkpoint and returns to the teacher or runs one GRPO update, after which fixed reference tests run automatically and the next step begins.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8"
+            markerHeight="7" orient="auto"><path d="M0 0 L10 4 L0 8 z" class="af"/></marker>
+    <marker id="arT" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8"
+            markerHeight="7" orient="auto"><path d="M0 0 L10 4 L0 8 z" class="afT"/></marker>
+  </defs>
+
+  <rect class="frozen" x="16" y="10" width="848" height="42" rx="4"/>
+  <text class="dlab frz" x="34" y="29">FROZEN WHEN THE RUN STARTS</text>
+  <text class="dsm frz" x="34" y="43">student · G=32 · batch 16 · mini-batch 8 · lr · sampling · 8 GPUs · 20 steps — identical to every baseline band</text>
+
+  <rect class="box teach" x="16" y="112" width="176" height="96" rx="4"/>
+  <text class="dlab tch" x="104" y="140" text-anchor="middle">TEACHER</text>
+  <text class="dsm" x="104" y="158" text-anchor="middle">Claude Opus 4.8</text>
+  <text class="dsm dim" x="104" y="174" text-anchor="middle">invoked fresh each turn;</text>
+  <text class="dsm dim" x="104" y="187" text-anchor="middle">reads the run directory</text>
+
+  <path class="edge t" d="M192 148 H 300" marker-end="url(#arT)"/>
+  <text class="dmono tch" x="246" y="139" text-anchor="middle">decision.json</text>
+  <text class="dmono tch" x="246" y="167" text-anchor="middle">data.jsonl</text>
+
+  <path class="edge" d="M300 130 H 372" marker-end="url(#ar)"/>
+  <text class="dsm" x="336" y="122" text-anchor="middle">evaluate</text>
+  <path class="edge" d="M300 168 H 372" marker-end="url(#ar)"/>
+  <text class="dsm" x="336" y="188" text-anchor="middle">train</text>
+  <line class="edge" x1="300" y1="130" x2="300" y2="168"/>
+
+  <rect class="box" x="372" y="88" width="212" height="66" rx="4"/>
+  <text class="dlab" x="478" y="112" text-anchor="middle">EVALUATE</text>
+  <text class="dsm dim" x="478" y="130" text-anchor="middle">its own problems, on the current</text>
+  <text class="dsm dim" x="478" y="144" text-anchor="middle">checkpoint — weights unchanged</text>
+
+  <rect class="box" x="372" y="176" width="212" height="66" rx="4"/>
+  <text class="dlab" x="478" y="200" text-anchor="middle">TRAIN</text>
+  <text class="dsm dim" x="478" y="218" text-anchor="middle">16 problems × 32 rollouts = 512</text>
+  <text class="dsm dim" x="478" y="232" text-anchor="middle">one GRPO update — step closes</text>
+
+  <path class="edge t back" d="M372 121 H 340 V 72 H 104 V 112" marker-end="url(#arT)"/>
+  <text class="dsm tch" x="238" y="65" text-anchor="middle">pass rates + full generations — same step, decide again</text>
+
+  <path class="edge" d="M584 209 H 656" marker-end="url(#ar)"/>
+  <text class="dsm" x="620" y="201" text-anchor="middle">new</text>
+  <text class="dsm" x="620" y="228" text-anchor="middle">weights</text>
+
+  <rect class="box auto" x="656" y="164" width="208" height="90" rx="4"/>
+  <text class="dlab sn" x="760" y="188" text-anchor="middle">REFERENCE TESTS</text>
+  <text class="dsm dim" x="760" y="206" text-anchor="middle">a fixed fifth of MATH-500,</text>
+  <text class="dsm dim" x="760" y="220" text-anchor="middle">AIME and HMMT — automatic,</text>
+  <text class="dsm dim" x="760" y="234" text-anchor="middle">not the teacher's to trigger</text>
+  <text class="dsm sn" x="760" y="248" text-anchor="middle">results land where the teacher reads</text>
+
+  <path class="edge t back" d="M760 254 V 300 H 104 V 208" marker-end="url(#arT)"/>
+  <text class="dsm tch" x="432" y="316" text-anchor="middle">step N+1 — 20 in all, weights kept at steps 5, 10, 15, 20</text>
+
+  <text class="dsm dim" x="16" y="344">The teacher never sets a hyper-parameter. The problems it writes are the whole of its influence — which is what makes this run comparable to a band.</text>
+</svg>
+</div>
 
 <h2 class="sec">2 &middot; The same panels, with a teacher-written curriculum</h2>
 <p class="seclede">Claude Opus 4.8 chose 16 problems per step, after evaluating the
