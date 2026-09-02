@@ -1,585 +1,183 @@
 # Frontier Teacher
 
-**Can a frontier model act as a teacher to train and improve a smaller model?**
+Testing whether frontier models can serve as teachers to better train smaller
+models on mathematics.
 
-This repository is the experimental infrastructure for that question, run on math
-reasoning tasks. The premise is that a large, strong model has knowledge a small
-model cannot reach on its own, and that the useful form of that knowledge is not
-just "the right answer" but *trajectories the student can actually learn from*.
-Whether a frontier teacher can supply those, and whether the student measurably
-improves as a result, is what we are here to measure.
+Everything currently in this repository is the **control**: plain GRPO, no
+teacher, which any teacher-side method has to beat. `train/frontier_model/` is
+where the teacher pipeline starts.
 
-Math is the testbed because it gives cheap, exact, automatic verification: an
-answer is right or wrong with no judge model in the loop, so any improvement is
-attributable to the teaching signal rather than to grader noise.
+**Results:** [Which Problems Teach](https://claude.ai/code/artifact/96d42a23-04d8-488e-9e70-a764cc971780) —
+fifteen GRPO runs plus three matched controls across three models and five
+difficulty bands. `docs/experiment.md` is the full record, including the
+failures worth knowing about; `docs/plan.md` is what is left.
 
-## Where the work stands
-
-Teacher–student training needs two things established before it can mean anything:
-an honest baseline for the student, and a training pool whose difficulty is
-actually known. Both are done and shipped here.
-
-- **Baselines** for three model configurations on MATH-500 and AIME 2020–2024.
-- **Difficulty profiles** over the 11,996-problem MATH training pool: every
-  problem's empirical pass@1 measured by direct sampling, per-sample verdicts kept.
-- **Curated training subsets** sliced by measured difficulty — the pool from which
-  teacher–student experiments draw.
-
-Teacher-side training is not in this repository yet.
-
-### Benchmarks
-
-| Benchmark | Problems | Samples / problem | Headline metric | Answer format | Status |
-|---|---:|---:|---|---|---|
-| MATH-500 | 500 | 4 | **pass@1** | mixed; symbolic compare | measured |
-| AIME 2020–2024 | 150 | 8 | **pass@4** | integers 0–999; exact compare | measured |
-| HMMT (3 competitions) | 93 | 16 | **pass@4** | 51/93 integers, 42 exact forms; symbolic compare | grading calibrated, **not yet run** |
-
-HMMT is also configured per competition — `hmmt_feb_2025`, `hmmt_nov_2025`,
-`hmmt_feb_2026` — so the three dates can be compared against a training cutoff.
-Sixteen samples yield the whole pass@1 / @4 / @8 / @16 ladder from one run; the
-headline is only which number a comparison should lead with.
-
-**Why the metric differs by benchmark.** The point of choosing *k* is to keep the
-score off both the floor and the ceiling, where it stops discriminating.
-
-On MATH-500, pass@1 works because 500 problems give a ±1.7 point standard error
-and Llama-3.2-3B scores 38.8% — mid-range, with room to move in both directions.
-
-On AIME it does not. Llama's pass@1 there is 6.3%, about nine problems out of
-150, and the standard error on that is ±2.0 — **32% relative noise**. A real
-improvement from 6.3% to 8% would be invisible. pass@4 lifts the same runs to
-15.3% ± 2.6, cutting relative noise to 17%. pass@k also answers the question this
-project actually cares about: whether a correct trajectory exists anywhere in the
-model's sampling distribution, since a problem the student never solves offers
-reinforcement learning nothing to reinforce.
-
-HMMT is harder than AIME with a third of the problems per competition, so pass@1
-would sit further onto the floor still, and pass@4 is the headline for the same
-reason.
-
-**A limit worth stating plainly:** the standard error is set by the number of
-problems, and no amount of extra sampling moves it. At 30 problems it is ±8.9
-points around a 50% score. Two single competitions can therefore only be
-distinguished if they differ by roughly 30 points — larger than the 20.7-point
-contamination effect measured on Llama. Any date-based comparison has to pool
-competitions to have the power to see anything.
-
-### Baselines
-
-| Configuration | MATH-500 pass@1 | AIME 2020–2024 pass@4 |
-|---|---:|---:|
-| Llama-3.2-3B-Instruct | 38.8% ± 1.7 | 15.3% ± 2.6 |
-| Qwen3-4B (non-thinking) | 83.3% ± 1.4 | 36.0% ± 3.6 |
-| Qwen3-4B (thinking) | 95.5% ± 0.8 | 80.6% ± 3.0 |
-
-MATH-500 uses 4 samples per problem and reports mean pass@1; AIME uses 8 samples
-and the unbiased pass@4 estimator (Chen et al., 2021).
-
-**Llama-3.2-3B is the student.** Qwen3-4B has no room to move on MATH — at 95.5%
-there are 4.5 points of headroom, so no teaching intervention could be resolved
-above noise. The two Qwen configurations are kept as reference points and as
-candidate teachers, not as students.
-
-### Two findings that shape the experimental design
-
-**Llama-3.2-3B was trained on the original MATH train split.** Profiling the full
-12k pool and splitting by provenance:
-
-| Pool | Problems | Mean pass@1 |
-|---|---:|---:|
-| Original train split | 7,498 | 61.0% |
-| Original test split (moved into the 12k by the PRM800K re-split) | 4,498 | 40.3% |
-| MATH-500 (held out, control) | 500 | 38.8% |
-
-The test-derived problems match the held-out control; the train-derived ones sit
-20.7 points above it, and the gap widens monotonically with difficulty (+10.5
-points at Level 1, +27.5 at Level 4). That is the signature of memorisation, not
-of a difficulty artefact. **All Llama subsets are drawn only from the 4,498 clean
-problems.**
-
-**The same test finds no asymmetry for Qwen3-4B** (82.5% / 84.2% / 83.3%), so its
-subsets use the full pool. Read that result narrowly: a train-vs-test comparison
-is a *differential* test and is blind to uniform exposure. If every MATH problem
-were in a model's training data, all splits would lift together and the difference
-would vanish, producing a reading identical to a genuinely clean model. The Llama
-result is positive evidence; the Qwen result is only the absence of differential
-evidence. Separating the hypotheses needs a benchmark released after the training
-cutoff, or a verbatim-continuation probe. Neither has been run.
+---
 
 ## Setup
 
-### Requirements
-
-- Linux, NVIDIA GPU with bf16 support. Everything here was run on 8× H100 80GB
-  per node; a single 80GB card is enough for one shard.
-- NVIDIA driver new enough for CUDA 12.x/13.x (ours: 595.71.05 / CUDA 13.2).
-- `conda` (Miniforge). `scripts/setup_env.sh` installs it if absent.
-- ~15 GB disk for the environment, plus ~7 GB per model checkpoint.
-- Network access to the HuggingFace Hub.
-
-### Install
+One environment for training and evaluation. Splitting them means training and
+evaluation can grade differently, and then a benchmark gain cannot be attributed
+to the model.
 
 ```bash
-git clone <this-repo> frontier-teacher
-cd frontier-teacher
-./scripts/setup_env.sh          # idempotent: miniforge -> conda env -> requirements.txt
+conda env create -f environment.yml     # python 3.12 only; everything else is pip
 conda activate frontier-teacher
+pip install -r requirements.lock.txt    # exact resolved set, from a verified node
 ```
 
-For the exact pinned set instead of a fresh resolution:
+vLLM 0.27.1, verl 0.9.0, flash-attn 2.8.3, `math-verify[antlr4_9_3]`. The antlr4
+extra matters: verl's hydra pins antlr4 to 4.9.\*, and `math-verify` defaults to
+13.2, so the default extra produces an environment that imports but grades
+nothing.
+
+verl's source is pinned, not vendored:
 
 ```bash
-LOCK=1 ./scripts/setup_env.sh
+scripts/fetch_verl_source.sh            # fetch the pinned commit into package/
+scripts/fetch_verl_source.sh --verify   # check it against the installed package
 ```
 
-Or without the script, if conda is already present:
+Run `--verify` after any environment change. It compares all 362 files by hash
+and fails if what is installed is not what `package/verl.lock` claims.
 
-```bash
-conda env create -f environment.yml && conda activate frontier-teacher
-```
-
-`setup_env.sh` is safe to re-run on a node that is already provisioned; it skips
-each step that is already satisfied.
-
-### Dependencies
-
-Three files, for three different needs:
-
-| File | Use it when |
-|---|---|
-| `requirements.txt` | Normal install. Names the 8 direct dependencies at the versions this was verified on, and lets pip resolve the rest against the local CUDA. |
-| `requirements.lock.txt` | Exact reproduction. The full 207-package resolved set, captured with `pip freeze` from a working node. |
-| `environment.yml` | `conda env create -f environment.yml`. Takes python from conda and everything else from `requirements.txt`. |
-
-One environment both evaluates and trains.
-
-| Package | Version | Why |
-|---|---|---|
-| `python` | 3.12 | |
-| `vllm` | **0.27.1** | Batch inference engine. Selects a CUDA-matched `torch` (2.13.0+cu130 here). |
-| `verl` | **0.9.0** | GRPO training. Brings `ray`, `tensordict`, `peft`, `hydra-core`. |
-| `math-verify[antlr4_9_3]` | 0.9.0 | Symbolic answer equivalence — MATH and HMMT answers are exact forms, not integers. |
-| `transformers` | 5.10.4 | Tokenizers and chat templates. Held here by verl. |
-| `datasets` | 5.0.1 | Dataset loading. |
-| `accelerate`, `pandas`, `tabulate`, `PyYAML` | — | Support. |
-| `flash-attn` | 2.8.3.post1 | Optional; see below. |
-
-Two of these are load-bearing rather than cautious.
-
-**`vllm` must be installed first and alone.** It selects the CUDA-matched `torch`
-build; installing `torch` yourself, or letting a later resolution step move it,
-is the usual way this environment breaks. `setup_env.sh` installs `vllm` on its
-own before the rest for exactly this reason.
-
-**`math-verify`'s extra must match the antlr4 runtime the environment ends up
-with.** verl depends on `hydra-core`, which pins `antlr4-python3-runtime==4.9.*`,
-so the correct extra here is `antlr4_9_3` — not `antlr4_13_2`, which is right
-only for an evaluation-only environment. A mismatch does not raise: the LaTeX
-parser degrades *silently*, failing to parse and depressing every score. A
-grading path that fails quietly is worse than one that crashes, because the
-result still looks like a number. `eval/calibrate.py` is what proves the
-installed combination actually works.
-
-### Evaluation and training share one environment
-
-They were initially built separately, on the finding that
-`math-verify[antlr4_13_2]` and verl's `hydra-core` pin antlr4 to mutually
-exclusive versions. That reading was incomplete — math-verify publishes an
-`antlr4_9_3` extra whose purpose is matching whatever antlr4 is already present,
-so with the right extra there is no conflict.
-
-Three independent checks confirmed the shared environment measures the same
-thing the evaluation-only one did:
-
-- **Chat templates are byte-identical.** Rendering the same prompt under
-  transformers 5.16.1 and 5.10.4 gives the same md5 for all three model
-  configurations, so the models are asked the same question.
-- **Grading is unchanged.** `calibrate_grading.py` passes identity, specificity,
-  thinking and all 28 equivalence cases at 100% on MATH-500, AIME and HMMT under
-  antlr4 4.9.3.
-- **A re-run reproduces the number.** Llama-3.2-3B on MATH-500 scored 39.1% in
-  the shared environment against 38.8% before — a 0.35-point difference, well
-  inside the ±1.7 standard error.
-
-### flash-attn
-
-Optional. verl runs without it, using PyTorch attention, which is slower.
-
-There is no prebuilt wheel for torch 2.13+cu130, so it builds from source, and
-the build fails out of the box: `CUDA_HOME` on these nodes points at a 12.9
-toolkit while torch was built with 13.0, and PyTorch's extension builder rejects
-a **major** version mismatch (it only warns on a minor one). CUDA 13.2 is present
-at `/usr/local/cuda`, which shares torch's major version:
-
-```bash
-CUDA_HOME=/usr/local/cuda TORCH_CUDA_ARCH_LIST="9.0" MAX_JOBS=8 \
-  pip install flash-attn==2.8.3.post1 --no-build-isolation
-```
-
-`TORCH_CUDA_ARCH_LIST="9.0"` builds for H100 only; the default builds every
-architecture and produces a ~930 MB extension. Keep `MAX_JOBS` modest — each
-nvcc job takes 2–4 GB.
-
-Verify an install:
-
-```bash
-python -c "import vllm, torch; print(vllm.__version__, torch.__version__)"
-# 0.27.1 2.13.0+cu130
-```
-
-### Model access
-
-`Qwen/Qwen3-4B` is open. `meta-llama/Llama-3.2-3B-Instruct` is gated and needs an
-approved HF token; the configs default to `unsloth/Llama-3.2-3B-Instruct`, an
-ungated mirror of the same weights. To use the official repository instead, set a
-token and change `model:` in the relevant `configs/eval/*.yaml`:
-
-```bash
-export HF_TOKEN=hf_...          # or: huggingface-cli login
-```
-
-## Quick start
-
-The datasets are committed, so a fresh clone can evaluate immediately:
-
-```bash
-conda activate frontier-teacher
-# one evaluation, fully described by its config
-python eval/evaluate.py --config configs/eval/llama32-3b__math500.yaml
-
-# the same config against a checkpoint: the command line wins, and the output
-# tag follows the weights, so a baseline cannot be overwritten
-python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml \
-  --model .local_checkpoints/<exp>/global_step_20/actor/huggingface
-
-# no config at all: data written a moment ago, at any path
-python eval/evaluate.py --model Qwen/Qwen3-4B --model-label qwen3-4b-think \
-  --data /abs/path/step7/data.jsonl --label teacher_step7 \
-  --verifier symbolic --samples 4 --thinking true
-
-./eval/run_all.sh                 # all baselines, one GPU per job
-python tools/report.py            # results table
-```
-
-The builders are only needed to verify the data or to refresh it from upstream.
-Re-running them reproduces the committed files byte for byte:
-
-```bash
-python data/build_datasets.py     # MATH-500 (500) + AIME, one file per year (150)
-python data/build_hmmt.py         # HMMT, one file per competition (93)
-python data/build_math_train.py   # MATH train pool (11,996)
-```
-
-Difficulty-profile a model over the training pool (8-way sharded, ~26 min for
-Llama at 32 samples; Qwen thinking takes hours):
-
-```bash
-./tools/run_profile.sh llama32-3b
-python eval/merge_shards.py --config configs/eval/llama32-3b__mathtrain.yaml
-python tools/profile_report.py \
-  --records outputs/math_profiling/llama32-3b__mathtrain.records.jsonl
-python tools/make_subsets.py --model llama32-3b
-```
-
-Every builder asserts on its output — 30 AIME problems per year with integer
-answers 0–999, the HMMT per-competition counts and mutual disjointness, the
-7,498 / 4,498 training-pool partition, and zero overlap between the training
-pool and MATH-500. A build that would contaminate the eval set fails instead of
-producing files.
+---
 
 ## Layout
 
 ```
-docs/experiment.md      The experimental record: what was run, what it
-                        measured, and what the numbers mean.
-docs/plan.md            Open work, ordered by what unblocks what, plus the
-                        decisions deliberately not revisited.
-requirements.txt        Direct dependencies.
-requirements.lock.txt   Full resolved set, for exact reproduction.
-environment.yml         conda env spec.
 configs/
-  eval/           One YAML per (model, benchmark) pair - 21 of them, each a
-                  complete evaluation: weights, decoding preset, sample count,
-                  verifier, data files. Each doubles as a template.
-  grpo/           Training-side configs.
+  eval/         One YAML per (model, benchmark) pair - 21 of them. Each fully
+                describes one evaluation and doubles as a template to copy.
+  grpo/         Training-side configs.
 data/
-  build_*.py      Dataset builders (assertions included).
-  benchmark/      Held-out evaluation sets: MATH-500, AIME, HMMT.
-  training_set/   The MATH training pool, split by original provenance.
-  further_improve/  Curated subsets sliced by measured difficulty.
-eval/             Everything that measures.
-  evaluate.py     vLLM generation + grading for one run. Config and command line
-                  both set any field; the command line wins, and the run prints
-                  where every value came from. --shard/--num-shards split a job.
-  metrics.py      pass@k for every k the sample count supports, plus the
-                  truncation and no-answer counters that say whether a score is
-                  a model result or a harness artefact.
-  verifiers/      Two, named by the config and never inferred: exact_integer
-                  (AIME - answers are integers 0-999 by the competition's rules)
-                  and symbolic (everything else). extract.py holds the \boxed{}
-                  extraction and the </think> split they share.
-  merge_shards.py Recombine a sharded run, recomputing metrics over the whole
-                  problem set rather than averaging shard means.
-  calibrate.py    Grading self-check: identity, specificity, thinking mode, and
-                  a table of hand-written equivalences.
-  check_baselines.py  Fail if a baseline's record ids no longer match what the
-                  harness emits - a mismatch yields an empty intersection rather
-                  than an error, and has cost three debugging rounds.
-  run_all.sh      Baselines, one GPU per job.
-  run_checkpoints.sh  One job per GPU. Right for Llama and non-thinking.
-  run_sharded.sh  One job at a time across all GPUs. Required for thinking,
-                  where a single HMMT job is 5.5 h on one card.
+  build_*.py    Dataset builders. Every one asserts on its output; re-running
+                them reproduces the committed files byte for byte.
+  benchmark/    MATH-500, AIME 2020-2024, HMMT (Feb 2025 / Nov 2025 / Feb 2026).
+  training_set/ The 11,996-problem MATH pool, split by original provenance.
+  further_improve/  Subsets cut by measured pass@1, with a manifest recording
+                the decoding settings each was measured under.
+eval/           Everything that measures.
+  evaluate.py   Generate with vLLM, grade, persist. One run, one benchmark.
+  metrics.py    pass@k for every k the sample count supports, plus the
+                truncation and no-answer counters that say whether a score is a
+                model result or a harness artefact.
+  verifiers/    Two, named by the config and never inferred: exact_integer
+                (AIME - answers are integers 0-999 by the competition's rules)
+                and symbolic (everything else). extract.py holds the \boxed{}
+                extraction and </think> split they share.
+  merge_shards.py, calibrate.py, check_baselines.py
+  run_all.sh, run_checkpoints.sh, run_sharded.sh
 train/
-  grpo/           The no-teacher baseline: run_grpo.sh (the verl config that
-                  matters), verl_reward.py (wraps eval/verifiers, so training
-                  and evaluation cannot disagree), to_verl_dataset.py.
-  frontier_model/ The teacher-in-the-loop pipeline.
-tools/            Off the critical path: subset sampling, difficulty reports,
-                  curve collection, paired statistics, the report renderer and
-                  its geometry and palette checks.
-scripts/          setup_env.sh, fetch_verl_source.sh, ckpt_janitor.sh.
-package/          verl.lock pins the exact verl commit; the source is fetched on
-                  demand and gitignored.
-outputs/          A symlink to ~/data/frontier-teacher/outputs on the shared
-                  bucket, so all three nodes read and write one set of results.
-                  A run's summary, per-problem records and raw generations land
-                  together.
-  benchmarks/     Baselines: the rollout-0 point of every curve.
-  grpo/           Checkpoint evaluations: the rest of every curve.
-  math_profiling/ Per-problem results over the 11,996-problem training pool -
-                  the difficulty measurement the subsets are cut from.
-  analysis/       curves.json and paired_stats.json, both regenerable.
-.local_checkpoints/  Node-local, gitignored. 26 GB per run, written and deleted
-                  within one node's evaluation.
+  grpo/         The no-teacher baseline. verl_reward.py wraps eval/verifiers, so
+                training and evaluation cannot grade differently.
+  frontier_model/  The teacher-in-the-loop pipeline.
+tools/          Off the critical path: subset sampling, difficulty reports,
+                curve collection, paired statistics, the report renderer.
+scripts/        setup_env.sh, fetch_verl_source.sh, ckpt_janitor.sh.
+package/        verl.lock pins the exact verl commit; the source is fetched on
+                demand and gitignored.
+outputs/        A symlink to ~/data/frontier-teacher/outputs on the shared
+                bucket, so all three nodes read and write one set of results.
+                A run's summary, records and raw generations land together.
+  benchmarks/     Baselines - the rollout-0 point of every curve.
+  grpo/           Checkpoint evaluations - the rest of every curve.
+  math_profiling/ Per-problem results over the training pool: the difficulty
+                  measurement the subsets are cut from.
+  analysis/       curves.json, paired_stats.json. Both regenerable.
+.local_checkpoints/  Node-local weights, gitignored. 26 GB per run, written and
+                deleted within one node's evaluation.
 ```
 
-## Datasets
+---
 
-`data/` is split by what the data is *for*, since the three roles must never be
-confused with one another:
+## Running things
 
-| Directory | Role |
-|---|---|
-| `benchmark/` | Held-out evaluation. Never trained on. MATH-500, AIME, HMMT. |
-| `training_set/` | The pool experiments train on, split by original provenance. |
-| `further_improve/` | Curated subsets drawn from that pool by measured difficulty. |
+### Evaluation
 
-**The data files are tracked in this repository, not fetched at run time.** What a
-score means depends on exactly which problems were scored, so the problem set is
-pinned rather than left to an upstream that may revise it. The builders in `data/`
-remain the reproducibility check: re-running them reproduces every file byte for
-byte, verified.
-
-One file per competition, so each set carries its own date — which is what makes
-these usable for reasoning about training cutoffs, not just about difficulty.
-
-| File(s) | Set | Problems | Source |
-|---|---|---:|---|
-| `benchmark/math500.jsonl` | MATH-500 | 500 | `HuggingFaceH4/MATH-500` — the problems Lightman et al. held out of the original MATH *test* split for PRM800K. |
-| `benchmark/aime_2020.jsonl` … `aime_2024.jsonl` | AIME, one file per year | 30 each, 150 total | `di-zhang-fdu/AIME_1983_2024` for 2020–21, `AI-MO/aimo-validation-aime` for 2022–24. |
-| `benchmark/hmmt_*.jsonl` (3 files) | HMMT | 30 / 30 / 33, 93 total | MathArena. |
-| `training_set/math_train_orig_train.jsonl` | MATH train pool, original-train half | 7,498 | `nlile/hendrycks-MATH-benchmark` train split, deduplicated. |
-| `training_set/math_train_orig_test.jsonl` | MATH train pool, original-test half | 4,498 | Same upstream; these were moved out of the original MATH *test* split by the PRM800K re-split. |
-
-A task reads either one file (`data_file`) or several concatenated in order
-(`data_files`), so the `aime` task spans all five years while the years stay
-separate on disk:
-
-```yaml
-aime: {n: 8, max_tokens: 4096, max_model_len: 8192,
-       data_files: [benchmark/aime_2020.jsonl, benchmark/aime_2021.jsonl,
-                    benchmark/aime_2022.jsonl, benchmark/aime_2023.jsonl,
-                    benchmark/aime_2024.jsonl]}
-```
-
-AIME has to be assembled from two upstreams because no single public set covers
-all five years; `di-zhang`'s 2023 and 2024 are incomplete (29 and 14 problems)
-and are deliberately unused. Problem ids are `aime-<year>-<nn>`. The full
-Hendrycks MATH set is 12,500 problems — 7,500 train and 5,000 test; the PRM800K
-re-split moves 4,500 test problems into training and keeps 500 as MATH-500,
-which is why the training pool and the eval set are disjoint by construction.
-
-The benchmark records under `outputs/` predate the per-year split and use the
-earlier flat `aime-<nnnn>` ids. They carry the full problem text, so they still
-join to the current files on that.
-
-### Why the training pool is split in two
-
-The 11,996-problem pool is stored as two files because the halves are not
-interchangeable. 7,498 problems come from the original Hendrycks *train* split;
-4,498 were moved out of the original *test* split by the PRM800K re-split. A
-model may have been exposed to the first and not the second — Llama-3.2-3B
-demonstrably was — in which case only the test-derived half measures reasoning
-rather than recall. Each record carries `split_origin`, computed at build time.
-
-Problem ids (`mathtrain-00000` … `mathtrain-11995`) are assigned over the pool as
-a whole in upstream order, *before* the split, so they run across both files
-rather than restarting in each. Existing profiling records and curated subsets
-reference these ids; the numbering is verified stable across the partition.
-
-### HMMT
-
-The Harvard-MIT Mathematics Tournament runs twice a year — November at Harvard,
-February at MIT — and is generally harder than AIME, since entry is by invitation
-rather than open selection. MathArena publishes each competition shortly after it
-is held, which is what makes these sets useful beyond raw difficulty: they carry
-a known date.
-
-| File | Competition | Problems | Integer answers |
-|---|---|---:|---:|
-| `benchmark/hmmt_feb_2025.jsonl` | February 2025 | 30 | 14 |
-| `benchmark/hmmt_nov_2025.jsonl` | November 2025 | 30 | 21 |
-| `benchmark/hmmt_feb_2026.jsonl` | February 2026 | 33 | 16 |
-| | **total** | **93** | **51** |
-
-Unlike the other benchmarks here these files are committed rather than rebuilt on
-demand, because MathArena's sets are recent enough that upstream revisions are
-plausible and the exact problem set should stay pinned. `data/build_hmmt.py`
-regenerates them and asserts the per-competition counts, that the three sets are
-mutually disjoint, and that none of the 93 problems appears in MATH-500.
-
-Only 51 of 93 HMMT answers are integers; the rest are exact forms —
-`\frac{1}{576}`, `\frac{9\sqrt{23}}{23}`, `1-\frac{2}{\pi}`,
-`(3+\sqrt{6})^{-1/3}` — so scoring goes through `math_verify` symbolic
-equivalence rather than the integer comparison AIME uses (`integer_answer:
-false` on every HMMT task).
-
-### Grading calibration
-
-An HMMT score is only worth reading if the parser can actually read HMMT
-answers, and this matters more here than usual: the reason to run these sets is
-to compare competitions against a training cutoff, and a parser that failed
-differently across competitions would look exactly like the effect being tested
-for. `eval/calibrate.py` exercises `grade()` on known inputs — no GPU
-time — so a failure is unambiguously a harness bug rather than a weak model:
-
-| Check | What it catches |
-|---|---|
-| identity | The gold answer, boxed, must grade correct. Below 100% the extractor cannot read this answer format. |
-| equivalence | 28 pairs that are the same value written differently. Failures mean correct answers get marked wrong. |
-| specificity | A sentinel answer must grade **wrong**. Without it, a grader that returns `True` unconditionally passes everything else. |
-| thinking | Identity again behind a `</think>` tag, since thinking models are graded only on what follows it. |
+A config and the command line are two ways to describe one run. For each field
+the command line wins, then the config, then the script's default — and the run
+prints where every value came from, so the rule never has to be remembered.
 
 ```bash
-python eval/calibrate.py --data data/benchmark/hmmt_*.jsonl
+# fully described by its config
+python eval/evaluate.py --config configs/eval/llama32-3b__math500.yaml
+
+# a checkpoint, with everything else from the model's benchmark config. The
+# output tag follows the weights, so this cannot overwrite the baseline.
+python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml \
+  --model .local_checkpoints/<exp>/global_step_20/actor/huggingface
+
+# no config: data written a moment ago, at any path. Nothing to register.
+python eval/evaluate.py --model Qwen/Qwen3-4B --model-label qwen3-4b-think \
+  --data /abs/path/step7/data.jsonl --label teacher_step7 \
+  --verifier symbolic --samples 4 --thinking true
 ```
 
-All four pass at 100% on MATH-500 (500), AIME (150) and HMMT (93).
+Three things are not optional: generations are always saved, every pass@k the
+sample count supports is reported, and the verifier is named rather than
+inferred.
 
-Calibration found and fixed one real defect: `\frac{-1\pm\sqrt{17}}{2}` — the
-natural way to write two roots — was graded wrong against a gold of two
-comma-separated values. `grading.py` now expands `\pm` / `\mp` before comparing.
+Across a run's checkpoints:
 
-One behaviour is documented rather than fixed: `math_verify` compares
-numerically within a tolerance, so a truncated decimal (`-0.047619047619`)
-matches an exact form (`-\frac{1}{21}`). That makes the grader more permissive,
-equally so for every model.
-
-The data is redistributed from MathArena under CC BY-NC-SA 4.0.
-
-## Results
-
-The nine GRPO runs and their controls are written up in
-[`docs/experiment.md`](docs/experiment.md) §7, and rendered as a figure by
-`tools/render_report.py` from `outputs/curves.json`:
-
-```
-python tools/collect_curves.py                  # -> outputs/analysis/curves.json
-python tools/paired_stats.py                    # bootstrapped intervals
-python tools/render_report.py --out report.html   # 3x3 small multiples, no plotting deps
+```bash
+eval/run_checkpoints.sh <config-name> <band> 8   # one job per GPU
+eval/run_sharded.sh     <config-name> <band> 8   # one job across all GPUs
 ```
 
-Headline: every configuration except Qwen3-4B-thinking gains in-domain from plain
-GRPO, the out-of-domain gain arrives only in the second half of training long
-after MATH-500 has flattened, and the thinking configuration moves on nothing at
-all because 92.9% of the training pool produces no gradient for it. That last
-number is the case for a teacher.
+Use the sharded form for thinking models. A single HMMT job there is 5.5 hours
+on one card — longer than any sane timeout — while a wave of eight runs only as
+fast as its slowest member.
 
-## Curated subsets
+### GRPO baseline
 
-`data/further_improve/<model>/`, one JSONL per difficulty band. Filenames encode the
-model, the pass@1 band, and the sample count.
+```bash
+train/grpo/run_grpo.sh <config-name> <band> [n_gpus]   # train only
+train/grpo/run_one.sh  <config-name> <band>            # train, then evaluate
+```
 
-**Llama-3.2-3B** — drawn from the 4,498 clean problems, profiled at 32 samples (pass@1 resolution 3.1%):
+Bands are the subsets in `data/further_improve/<model>/`. Group size follows the
+band's measured pass@1: a group whose rollouts all fail contributes no gradient,
+which is 48% of groups at pass@1 8.7% with G=8 but 5% with G=32. Batch sizes are
+set against G to hold 512 rollouts per step, so every curve shares an x-axis.
 
-| File | Band | Mean pass@1 | Pool | Sampled |
-|---|---|---:|---:|---:|
-| `llama32-3b__pass1_eq_0__n800.jsonl` | p = 0 | 0.0% | 814 | 800 |
-| `llama32-3b__pass1_05-15pct__n400.jsonl` | 5% ≤ p < 15% | 8.7% | 487 | 400 |
-| `llama32-3b__pass1_40-60pct__n500.jsonl` | 40% ≤ p ≤ 60% | 49.5% | 570 | 500 |
-| `llama32-3b__pass1_85-95pct__n400.jsonl` | 85% < p < 95% | 90.9% | 437 | 400 |
-| `llama32-3b__pass1_eq_1__n100.jsonl` | p = 1 | 100.0% | 131 | 100 |
+`GROUP_SIZE=32` overrides the band's group size; `TAG=__g32` suffixes the
+experiment name so a re-run lands beside the original.
 
-**Qwen3-4B non-thinking** — full pool of 11,996, profiled at 8 samples (pass@1 resolution 12.5%):
+### Frontier teacher
 
-| File | Band | Mean pass@1 | Pool | Sampled |
-|---|---|---:|---:|---:|
-| `qwen3-4b-nothink__pass1_eq_0__n700.jsonl` | p = 0 | 0.0% | 779 | 700 |
-| `qwen3-4b-nothink__pass1_12-25pct__n600.jsonl` | 12.5% ≤ p ≤ 25% | 18.3% | 624 | 600 |
-| `qwen3-4b-nothink__pass1_37-62pct__n1000.jsonl` | 37.5% ≤ p ≤ 62.5% | 51.3% | 1,021 | 1,000 |
-| `qwen3-4b-nothink__pass1_75-87pct__n1000.jsonl` | 75% ≤ p ≤ 87.5% | 82.9% | 1,373 | 1,000 |
-| `qwen3-4b-nothink__pass1_eq_1__n1000.jsonl` | p = 1 | 100.0% | 8,199 | 1,000 |
+```bash
+train/frontier_model/run_teacher_step.sh <step> <config> <workspace> <ckpt-dir>
+```
 
-**Qwen3-4B thinking** — full pool of 11,996, profiled at 8 samples (pass@1 resolution 12.5%):
+The teacher writes problems, the student trains on them, and the loop evaluates
+with `eval/evaluate.py` unmodified — a plain command line against the data it
+just wrote.
 
-| File | Band | Mean pass@1 | Pool | Sampled |
-|---|---|---:|---:|---:|
-| `qwen3-4b-think__pass1_eq_0__n200.jsonl` | p = 0 | 0.0% | 295 | 200 |
-| `qwen3-4b-think__pass1_12-25pct__n100.jsonl` | 12.5% ≤ p ≤ 25% | 18.6% | 136 | 100 |
-| `qwen3-4b-think__pass1_37-62pct__n200.jsonl` | 37.5% ≤ p ≤ 62.5% | 51.1% | 235 | 200 |
-| `qwen3-4b-think__pass1_75-87pct__n400.jsonl` | 75% ≤ p ≤ 87.5% | 83.7% | 480 | 400 |
-| `qwen3-4b-think__pass1_eq_1__n500.jsonl` | p = 1 | 100.0% | 10,850 | 500 |
+### Analysis
 
-Each record carries `id`, `problem`, `answer`, `level`, `subject`, `pass_at_1`,
-`n_correct`, `n_samples`, `split_origin`, `band`, `profiled_model`. Every
-directory has a `manifest.json` recording the decoding settings the pass@1 was
-measured under, the pool policy and why, the sampling seed, and each subset's
-level and provenance composition.
+```bash
+python tools/collect_curves.py      # summaries   -> outputs/analysis/curves.json
+python tools/paired_stats.py        # bootstrapped intervals, problems + generations
+python tools/render_report.py --out report.html      # 3x3 figure, no plotting deps
+```
 
-`pass_at_1` is a property of *a model under a specific decoding configuration*,
-not of the problem. Read it together with the manifest's `profiled_with` block.
+### Checks worth running
 
-**Why these bands.** Group-normalised RL (GRPO and relatives) produces gradient
-only when `0 < pass@1 < 1`: an all-correct or all-wrong group has zero advantage
-and contributes nothing. The bands cover that axis end to end — the p = 0 and
-p = 1 sets are deliberately included as the degenerate cases, useful for
-teacher-side experiments precisely because plain RL cannot use them.
+```bash
+python eval/calibrate.py --data data/benchmark/hmmt_feb_2025.jsonl   # grading is sound
+python eval/check_baselines.py                # baseline ids still match the harness
+python tools/geomcheck.py report.html         # marks in bounds, labels not colliding
+scripts/fetch_verl_source.sh --verify         # installed verl == the pin
+```
 
-The `split_origin` field is preserved on the Qwen subsets so they can be filtered
-to test-derived problems without re-sampling, should the contamination question
-be settled later.
+Each exists because the failure it catches happened and was not obvious: a
+grader that silently returns True, a baseline whose record ids drifted so the
+paired analysis found an empty intersection, ten overlapping labels in a
+published figure, an environment no longer matching its lock.
 
-## Reproducibility
+---
 
-Generation runs at `temperature > 0` under a fixed seed (1234), per each vendor's
-recommended decoding preset rather than one shared setting. Subset sampling is
-uniform without replacement under seed 20260828, with a separate stream per band
-so changing one band's size does not perturb another's draw; re-running
-`make_subsets.py` reproduces byte-identical files.
-
-Every run records `truncation_rate` and `no_answer_rate` alongside the score. If
-either is high the number is a harness artefact rather than a model result. Two
-known ones: Llama emits no `\boxed{}` on about 10% of samples (weak format
-adherence at 3B, only ~3% of it truncation), and Qwen3-4B thinking truncates on
-13.3% of AIME samples against the 30,000-token cap, so its true AIME score is
-somewhat above the reported figure.
-
-## What is not here
-
-Results are no longer tracked in git. They live on the shared bucket under
-`~/data/frontier-teacher/outputs/`, which `outputs/` symlinks to on every node -
-2.7 GB of summaries, per-problem records and raw generations across three
-directories. That was previously a workaround for results existing only on
-container disks; the bucket removes the need, and the history of what was
-tracked before is intact.
-
-Checkpoints are node-local under `.local_checkpoints/`. verl writes each one
-twice: FSDP shards for resuming and a HuggingFace-format export for loading.
-Only the export is ever read, so a cron job strips the shards - which also
-removes any way to resume an interrupted run, a trade `docs/experiment.md`
-records the cost of.
-
-verl's source is not vendored. `package/verl.lock` pins the exact commit and
-`scripts/fetch_verl_source.sh` fetches it, then checks the fetched tree against
-the installed package file by file.
+Datasets are committed. Pinning the exact problem set is what makes a score
+comparable across runs and across time; the builders stay as the reproducibility
+check.
