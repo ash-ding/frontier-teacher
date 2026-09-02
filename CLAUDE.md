@@ -17,7 +17,7 @@ an experiment — several obvious ones have already been run or ruled out.
 | `data/benchmark/` | MATH-500, AIME 2020-2024, HMMT (Feb 2025 / Nov 2025 / Feb 2026) |
 | `data/training_set/` | the 11,996-problem MATH pool, split by original provenance |
 | `data/further_improve/<model>/` | subsets by measured pass@1, each with a `manifest.json` recording the decoding settings it was measured under |
-| `eval/evaluate.py` | the only evaluation path. Config and command line both set any field; the command line wins and the run prints every value's source |
+| `eval/evaluate.py` | the only evaluation path. Every setting has both a config key and a CLI flag; the command line wins, and the run prints every value's source |
 | `eval/verifiers/` | two, named by the config: `exact_integer` (AIME) and `symbolic` (the rest). `extract.py` holds the `\boxed{}` extraction and `</think>` split |
 | `eval/metrics.py` | pass@k for every k the sample count supports, plus truncation / no-answer counters |
 | `train/grpo/` | the no-teacher baseline. `verl_reward.py` wraps `eval/verifiers`, so training and evaluation cannot grade differently |
@@ -65,8 +65,8 @@ environment change.
 # evaluation - config, command line, or both (command line wins)
 python eval/evaluate.py --config configs/eval/llama32-3b__math500.yaml
 python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml --model <ckpt-dir>
-python eval/evaluate.py --model <id> --model-label <short> --data <any-path> \
-                        --label <what-it-is> --verifier symbolic --samples 8
+python eval/evaluate.py --model <id> --data <any-path> --label <what-it-is> \
+                        --verifier symbolic --samples 8 --output-path <dir>
 
 eval/run_all.sh                          # baselines, one GPU per job
 eval/run_checkpoints.sh  <cfg> <band> 8  # one job per GPU: Llama, non-thinking

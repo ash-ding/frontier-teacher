@@ -109,14 +109,20 @@ python eval/evaluate.py --config configs/eval/llama32-3b__aime.yaml \
   --model .local_checkpoints/<exp>/global_step_20/actor/huggingface
 
 # no config: data written a moment ago, at any path. Nothing to register.
-python eval/evaluate.py --model Qwen/Qwen3-4B --model-label qwen3-4b-think \
+python eval/evaluate.py --model Qwen/Qwen3-4B \
   --data /abs/path/step7/data.jsonl --label teacher_step7 \
-  --verifier symbolic --samples 4 --thinking true
+  --verifier symbolic --samples 4 --thinking true \
+  --output-path outputs/frontier-model/run_.../step_7/eval_0
 ```
 
-Three things are not optional: generations are always saved, every pass@k the
-sample count supports is reported, and the verifier is named rather than
-inferred.
+Every setting has both a config key and a command-line flag, so neither form is
+a subset of the other. `--config`, `--output-path`, `--shard`, `--num-shards`
+and `--limit` are not settings — they say which run this is and where it writes.
+
+Three things are not optional: `summary.json`, `records.jsonl` and
+`generations.jsonl` are always written, side by side under `--output-path`;
+every pass@k the sample count supports is reported; and the verifier is named
+rather than inferred.
 
 Across a run's checkpoints:
 

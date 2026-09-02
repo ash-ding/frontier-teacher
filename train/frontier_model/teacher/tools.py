@@ -272,6 +272,9 @@ def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
         "--temperature", str(base.get("temperature", 0.6)),
         "--top-p", str(base.get("top_p", 0.9)),
         "--top-k", str(base.get("top_k", -1)),
+        "--seed", str(base.get("seed", 1234)),
+        "--tensor-parallel-size", str(base.get("tensor_parallel_size", 1)),
+        "--gpu-memory-utilization", str(base.get("gpu_memory_utilization", 0.90)),
         "--limit", "0",
         "--output-path", str(step_dir),
     ]

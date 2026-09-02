@@ -114,16 +114,21 @@ def build_args():
     g.add_argument("--temperature", type=float, default=None)
     g.add_argument("--top-p", type=float, default=None)
     g.add_argument("--top-k", type=int, default=None)
+    g.add_argument("--seed", type=int, default=None)
     g.add_argument("--thinking", choices=["true", "false"], default=None,
                    help="Qwen3 only; Llama has no such mode and must not be given one")
 
     g = ap.add_argument_group("grading")
     g.add_argument("--verifier", choices=["exact_integer", "symbolic"], default=None,
-                   help="default: the task's `verifier` key")
+                   help="exact_integer for AIME, symbolic for everything else")
+    g.add_argument("--headline-metric", default=None,
+                   help="which pass@k the summary leads with, e.g. pass@4")
 
     g = ap.add_argument_group("execution")
     g.add_argument("--shard", type=int, default=0)
     g.add_argument("--num-shards", type=int, default=1)
+    g.add_argument("--tensor-parallel-size", type=int, default=None,
+                   help="vLLM TP degree; 1 means one job per GPU")
     g.add_argument("--gpu-memory-utilization", type=float, default=None)
     g.add_argument("--limit", type=int, default=0, help="debug: first N problems only")
     return ap.parse_args()
@@ -142,7 +147,8 @@ def resolve(args):
     Precedence is a rule you would otherwise have to hold in your head, so every
     run prints each setting with the source it came from.
 
-    `--out` is not a setting and does not take part; it says where to write.
+    `--output-path` is not a setting and does not take part; it says where to
+    write. Nor are `--config`, `--shard`, `--num-shards` and `--limit`.
     """
     cfg = yaml.safe_load(open(args.config)) if args.config else {}
     cfg = {k: v for k, v in cfg.items() if v is not None}
@@ -150,8 +156,10 @@ def resolve(args):
     cli = {
         "samples": args.samples, "max_tokens": args.max_tokens,
         "max_model_len": args.max_model_len, "temperature": args.temperature,
-        "top_p": args.top_p, "top_k": args.top_k,
+        "top_p": args.top_p, "top_k": args.top_k, "seed": args.seed,
+        "tensor_parallel_size": args.tensor_parallel_size,
         "gpu_memory_utilization": args.gpu_memory_utilization,
+        "headline_metric": args.headline_metric,
         "verifier": args.verifier, "model": args.model, "label": args.label,
         "data": args.data,
         "enable_thinking": None if args.thinking is None else args.thinking == "true",
