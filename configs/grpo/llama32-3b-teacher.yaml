@@ -1,62 +1,58 @@
-# Orchestration knobs for the observational teacher-in-the-loop curriculum loop.
-# This is NOT an evaluate.py config; it configures src/teacher/orchestrator.py.
-# The orchestrator clones the `teacher_eval` task template below into a per-step
-# evaluate.py config that points at the teacher's own data.jsonl.
+# The observational teacher-in-the-loop curriculum loop.
+#
+# This configures train/frontier_model/teacher/orchestrator.py, not an
+# evaluation. Every field below can also be given on the command line, and for
+# each field independently the command line wins, then this file, then the
+# orchestrator's own default - the same rule eval/evaluate.py follows.
 
-# --- teacher (claude -p) -------------------------------------------------------
-# Model alias for `claude --model`; leave "" to use the CLI default. sonnet is a
-# capable, cost-efficient frontier teacher; "opus" is available for the strongest.
-teacher_model: sonnet
-# NOTE: claude 2.1.258 has NO --max-turns flag, so the runaway-loop guard is the
-# per-turn wall-clock timeout plus the cost ceiling below (not a turn cap).
-teacher_timeout_s: 900        # kill a teacher turn that runs longer than this
-teacher_max_budget_usd: 5.0   # hard per-turn cost ceiling (--max-budget-usd)
-consecutive_failure_abort: 2  # failure-streak threshold recorded on the abort-log
-                              # line. NOTE: the loop is fail-safe and halts-and-logs
-                              # on the FIRST failure (teacher-turn failure, or a
-                              # malformed/missing/invalid decision.json/data.jsonl),
-                              # so today this acts as a first-failure halt, not a
-                              # retry budget. It never best-effort parses or retries.
+# --- teacher (a frontier model, driven through `claude -p`) --------------------
+teacher_model: opus-4.8       # alias passed to `claude --model`
+teacher_timeout_s: 1800       # kill a teacher turn that runs longer than this.
+                              # The claude CLI has no turn cap, so this is the
+                              # only guard against a turn that will not end.
 halt_on_duplicate: true       # halt if a step's (decision, data) repeats verbatim
+consecutive_failure_abort: 2  # recorded on the abort-log line. The loop is
+                              # fail-safe and halts on the FIRST failure - a
+                              # failed teacher turn, or a malformed decision.json
+                              # or data.jsonl - so this is not a retry budget. It
+                              # never best-effort parses and never retries.
 
 # --- run / workspace -----------------------------------------------------------
-# 1 step == 1 TRAINING update. Within a step the teacher may EVALUATE any number
-# of times (each on the SAME latest checkpoint); the step only CLOSES and advances
-# when the teacher chooses to TRAIN. `--steps N` therefore means N GRPO updates.
-steps: 4                                    # default N training steps; overridden by --steps
-out_root: outputs/teacher_curriculum        # run_<id>/ workspaces land here
+# One step is one TRAINING update. Within a step the teacher may evaluate any
+# number of times, always against the same checkpoint; the step closes only when
+# it chooses to train. So `steps: 4` means four GRPO updates.
+steps: 4
+max_evals_per_step: 10        # reaching this without a train halts the run
+                              # cleanly. A train is never fabricated to proceed.
+output_path: outputs/frontier-model   # run_<timestamp>/ is created under here
 n_gpus: 8
-# The teacher may evaluate at most this many times within a single step before it
-# must train. Reaching the cap WITHOUT a train decision halts the run cleanly
-# (descriptive halt event, rc=1) -- we never fabricate a train. Overridable with
-# --max-evals-per-step.
-max_evals_per_step: 10
 
 # --- student / GRPO ------------------------------------------------------------
-grpo_config: llama32-3b                      # preset selector for run_teacher_step.sh
-base_model: unsloth/Llama-3.2-3B-Instruct    # step-0 model.path (matches the preset)
-train_max_problems: 16                       # hard cap; extra teacher rows truncated
-train_step_timeout_s: 3600                   # wall clock for one GRPO update
-eval_step_timeout_s: 3600                    # wall clock for one evaluation
+grpo_config: llama32-3b                     # preset in run_teacher_step.sh
+base_model: unsloth/Llama-3.2-3B-Instruct   # step-0 weights; matches the preset
+train_max_problems: 16                      # extra teacher rows are truncated
+train_step_timeout_s: 3600
+eval_step_timeout_s: 3600
 
-# --- read-only context mounted to the teacher each step ------------------------
-# Comparison point (curated, difficulty-graded training data). Context ONLY; no
-# standard-GRPO baseline is run this cycle.
-reference_data: data/further_improve/llama32-3b
-# Re-materialised from pristine git before every train/eval action so any teacher
-# edit is discarded and the real run always uses the validated code.
+# --- what the teacher may read -------------------------------------------------
+# One data file, copied into the run directory rather than mounted, so what the
+# teacher read is part of the run's record. Omit the field for none.
+# reference_data: /abs/path/to/some.jsonl
+
+# Re-materialised from pristine git before every train or evaluate, so any edit
+# the teacher makes to them is discarded and the real run uses validated code.
 read_only_paths:
-  - src/grading.py
-  - src/verl_reward.py
-  - scripts/run_grpo.sh
-  - src/to_verl_dataset.py
-  - src/evaluate.py
-  - configs/llama32-3b.yaml
+  - eval/verifiers/extract.py
+  - eval/verifiers/symbolic.py
+  - eval/verifiers/exact_integer.py
+  - eval/evaluate.py
+  - train/grpo/verl_reward.py
+  - train/grpo/run_grpo.sh
+  - train/grpo/to_verl_dataset.py
 
-# --- per-step evaluate.py task template ----------------------------------------
-# Cloned into step_<N>/config.eval.yaml with data_file pointed at the teacher's
-# data.jsonl. Decoding params mirror configs/llama32-3b.yaml (validated); we do
-# not duplicate that file's benchmark task defs.
+# --- how each step's evaluation is run -----------------------------------------
+# eval/evaluate.py is invoked on the command line against the teacher's own
+# data.jsonl; these supply its settings.
 eval_base:
   temperature: 0.6
   top_p: 0.9
@@ -65,7 +61,7 @@ eval_base:
   tensor_parallel_size: 1
   gpu_memory_utilization: 0.90
 teacher_eval:
-  n: 4                # gives pass@1 and pass@4 from one run
+  n: 4                  # gives pass@1 through pass@4 from one run
   max_tokens: 4096
   max_model_len: 8192
-  integer_answer: false
+  verifier: symbolic    # the teacher's problems are MATH-style exact forms

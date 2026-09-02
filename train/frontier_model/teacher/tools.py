@@ -97,7 +97,7 @@ def _current_step_evals_summary(evals):
 
 def render_context(run_dir, step, config, latest_ckpt, repo_root, *,
                    cwd, action_index=0, current_step_evals=None,
-                   max_evals_per_step=10):
+                   max_evals_per_step=10, reference_file=None):
     """Build the teacher's per-sub-action task message (a plain string).
 
     A step is an inner loop of sub-actions (evaluate* then train). This message is
@@ -114,7 +114,6 @@ def render_context(run_dir, step, config, latest_ckpt, repo_root, *,
     run_dir = Path(run_dir).resolve()
     cwd = Path(cwd).resolve()
     current_step_evals = current_step_evals or []
-    ref = (repo_root / config["reference_data"]).resolve()
     ro = [str((repo_root / p).resolve()) for p in config["read_only_paths"]]
     remaining = max_evals_per_step - len(current_step_evals)
 
@@ -131,7 +130,7 @@ def render_context(run_dir, step, config, latest_ckpt, repo_root, *,
             ed = cur_dir / f"eval_{e.get('action_index')}"
             if ed.exists():
                 cur_paths.append(str(ed) + "/   (decision.json, data.jsonl, "
-                                 "eval.summary.json, eval.records.jsonl, eval.log)")
+                                 "summary.json, records.jsonl, generations.jsonl, eval.log)")
 
     msg = [
         f"You are on STEP {step} of the curriculum loop. One step is ONE training",
@@ -153,10 +152,9 @@ def render_context(run_dir, step, config, latest_ckpt, repo_root, *,
         "All evaluations within this step run on THIS same checkpoint; only a train",
         "advances it.",
         "",
-        "READ-ONLY reference: curated, difficulty-graded training data already",
-        "shipped with the project (the comparison point for standard GRPO). Browse",
-        f"it for context only:\n  {ref}",
-        "",
+        *(["READ-ONLY reference data, copied into this run so that what you read",
+           "is part of its record. Context only:",
+           f"  {reference_file}", ""] if reference_file else []),
         "READ-ONLY project source (the verifier and the training/eval code that",
         "will run your decision). Context only -- any edit is discarded:",
         *[f"  {p}" for p in ro],
@@ -229,20 +227,16 @@ def _parse_verl_metrics(log_path):
 
 
 
-def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
-                   action_index=0):
+def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
     """Evaluate the current checkpoint on the teacher's data via evaluate.py.
 
-    `step_dir` is this eval sub-action's own dir (step_<N>/eval_<M>/). Reuses
-    evaluate.py unmodified: `--limit 0` (uncapped); generations are always saved,
-    `--output-path step_dir`. Copies the
-    summary/records to the canonical eval.summary.json / eval.records.jsonl in the
-    sub-action dir. Returns a dict of eval stats (weights unchanged).
+    `step_dir` is this eval sub-action's own dir (step_<N>/eval_<M>/), and is
+    passed straight through as `--output-path`, so evaluate.py lands its
+    summary.json / records.jsonl / generations.jsonl there. `--limit 0` is
+    uncapped. Returns a dict of eval stats (weights unchanged).
     """
     step_dir = Path(step_dir)
     step_data = step_dir / "data.jsonl"
-    name = f"teacher_step{step}_eval{action_index}"
-    tag = f"{name}__teacher_eval"
 
     # Pure command line: the teacher writes fresh data every step, so there is
     # no config to point at and nothing to register. Passing --config as well
@@ -268,15 +262,11 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
     rc, timed_out, wall = _stream(argv, step_dir / "eval.log", cwd=str(repo_root),
                                   timeout_s=timeout_s)
 
-    summ_src = step_dir / f"{tag}.summary.json"
-    recs_src = step_dir / f"{tag}.records.jsonl"
+    summ_src = step_dir / "summary.json"
     stats = {"status": "ok" if (rc == 0 and not timed_out) else "error",
              "action_wallclock_s": round(wall, 1), "returncode": rc,
              "timed_out": timed_out}
     if summ_src.exists():
-        shutil.copyfile(summ_src, step_dir / "eval.summary.json")
-        if recs_src.exists():
-            shutil.copyfile(recs_src, step_dir / "eval.records.jsonl")
         s = json.loads(summ_src.read_text())
         stats["eval"] = {
             "n_problems": s.get("n_problems"),
@@ -293,7 +283,7 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
 
 
 def eval_stats_from_summary(summary_path):
-    """Reconstruct the compact eval-stats dict from a saved eval.summary.json.
+    """Reconstruct the compact eval-stats dict from a saved summary.json.
 
     Used on idempotent restart to recover an already-completed eval sub-action's
     numbers without re-running evaluate.py. Mirrors the extraction in

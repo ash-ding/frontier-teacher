@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One GRPO update for the observational teacher loop.
 #
-#   scripts/run_teacher_step.sh <config-name> <train_file> <model_path> <ckpt_dir> [n_gpus]
+#   train/frontier_model/run_teacher_step.sh <config-name> <train_file> <model_path> <ckpt_dir> [n_gpus]
 #
 # Sibling of run_grpo.sh, kept separate so that validated script stays untouched.
 # It reuses run_grpo.sh's llama32-3b preset values VERBATIM (MODEL default,

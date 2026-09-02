@@ -12,7 +12,7 @@ Modules:
   protocol       strict decision/data/result schemas, atomic writes, duplicate detector
   claude_client  thin headless `claude -p` wrapper (Vertex auth, stream-json parse)
   tools          the two decision executors + read-only context assembly
-  orchestrator   the driver loop (entry point: `python -m src.teacher.orchestrator`)
+  orchestrator   the driver loop (entry point: `python train/frontier_model/teacher/orchestrator.py`)
 """
 
 __all__ = ["protocol", "claude_client", "tools", "orchestrator"]

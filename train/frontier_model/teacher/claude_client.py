@@ -71,8 +71,7 @@ def run_teacher_turn(
     log_path,
     repo_root,
     model: str = "",
-    timeout_s: int = 900,
-    max_budget_usd: float = 0.0,
+    timeout_s: int = 1800,
     allowed_tools: str = "Bash,Read,Write",
     disallowed_tools: str = "Edit",
 ) -> TeacherResult:
@@ -96,8 +95,6 @@ def run_teacher_turn(
     ]
     if model:
         argv += ["--model", model]
-    if max_budget_usd and max_budget_usd > 0:
-        argv += ["--max-budget-usd", str(max_budget_usd)]
 
     Path(cwd).mkdir(parents=True, exist_ok=True)
     t0 = time.time()

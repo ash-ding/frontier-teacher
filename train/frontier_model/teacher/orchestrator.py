@@ -28,7 +28,7 @@ Workspace per step:
       config.json                 resolved config snapshot (written at step start)
       eval_<M>/                    one per evaluation sub-action (M = 0,1,...)
         decision.json data.jsonl teacher.log
-        config.eval.yaml eval.summary.json eval.records.jsonl rollouts/ eval.log
+        summary.json records.jsonl generations.jsonl eval.log
       train/                       the terminating train sub-action
         decision.json data.jsonl teacher.log
         train.verl.jsonl train.log ckpt/.../huggingface
@@ -36,8 +36,11 @@ Workspace per step:
                                   {step, n_evals, evals:[...], train:{...},
                                    latest_checkpoint_hf_path}
 
-Entry point:  python -m src.teacher.orchestrator --config <cfg> [--run-name X]
-              [--steps N] [--max-evals-per-step K] [--dry-run] [--dry-always-eval]
+Entry point:  python train/frontier_model/teacher/orchestrator.py --config <cfg>
+              [--steps N] [--max-evals-per-step K] [--output-path DIR]
+              [--reference-data FILE] [--dry-run] [--dry-always-eval]
+
+The run directory is always <output-path>/run_<timestamp>/.
 
 --dry-run is a fast, no-GPU self-test: it fabricates the teacher turns and stubs
 the train/eval executors, exercising the inner loop (multiple evals then a train),
@@ -55,8 +58,8 @@ from pathlib import Path
 import yaml
 
 if __package__ in (None, ""):  # allow `python train/frontier_model/teacher/orchestrator.py`
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-    from src.teacher import claude_client, protocol, tools
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from teacher import claude_client, protocol, tools
 else:
     from . import claude_client, protocol, tools
 
@@ -77,23 +80,66 @@ def _append_jsonl(path, obj):
 
 
 class Orchestrator:
-    def __init__(self, config_path, run_name, steps, dry_run,
-                 max_evals_per_step=0, dry_always_eval=False):
+    # Command line, then config, then these - the same order eval/evaluate.py
+    # uses, so one rule covers the whole repository.
+    DEFAULTS = {
+        "steps": 4,
+        "max_evals_per_step": 10,
+        "output_path": "outputs/frontier-model",
+        "teacher_model": "opus-4.8",
+        "teacher_timeout_s": 1800,
+        "base_model": "unsloth/Llama-3.2-3B-Instruct",
+        "grpo_config": "llama32-3b",
+        "n_gpus": 8,
+        "train_max_problems": 16,
+        "train_step_timeout_s": 3600,
+        "eval_step_timeout_s": 3600,
+        "halt_on_duplicate": True,
+        "consecutive_failure_abort": 2,
+        "read_only_paths": [],
+        "reference_data": None,
+    }
+
+    def __init__(self, config_path, dry_run, steps=None, max_evals_per_step=None,
+                 output_path=None, reference_data=None, dry_always_eval=False):
         self.config_path = Path(config_path)
-        self.config = yaml.safe_load(self.config_path.read_text())
+        cfg = yaml.safe_load(self.config_path.read_text()) or {}
+        cli = {k: v for k, v in {"steps": steps,
+                                 "max_evals_per_step": max_evals_per_step,
+                                 "output_path": output_path,
+                                 "reference_data": reference_data}.items()
+               if v is not None}
+        self.config = {**self.DEFAULTS, **cfg, **cli}
         self.dry_run = dry_run
         self.dry_always_eval = dry_always_eval
-        self.steps = steps or int(self.config.get("steps", 4))
-        self.max_evals_per_step = int(
-            max_evals_per_step or self.config.get("max_evals_per_step", 10))
-        rid = run_name or _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_dir = (ROOT / self.config["out_root"] / f"run_{rid}").resolve()
+        self.steps = int(self.config["steps"])
+        self.max_evals_per_step = int(self.config["max_evals_per_step"])
+
+        # Runs are named by when they happened. A caller-supplied name is one more
+        # thing to keep unique, and a repeat silently writes into a finished run.
+        rid = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = Path(self.config["output_path"]).expanduser()
+        if not out.is_absolute():
+            out = ROOT / out
+        self.run_dir = (out / f"run_{rid}").resolve()
         self.run_dir.mkdir(parents=True, exist_ok=True)
+
+        # The teacher sees one reference file, copied in rather than mounted, so
+        # what it read is part of the run's record. Absent means it sees none.
+        self.reference_file = None
+        ref = self.config.get("reference_data")
+        if ref:
+            src = Path(ref).expanduser()
+            if not src.is_file():
+                raise SystemExit(f"reference_data is not a file: {src}")
+            dst = self.run_dir / f"reference{src.suffix or '.jsonl'}"
+            shutil.copy2(src, dst)
+            self.reference_file = dst
         self.events = self.run_dir / "events.jsonl"
         self.metrics = self.run_dir / "metrics.jsonl"
         self.run_state = self.run_dir / "run_state.json"
         self.system_prompt = (PROMPTS / "teacher_system.md").read_text()
-        self.base_model = self.config.get("base_model", "unsloth/Llama-3.2-3B-Instruct")
+        self.base_model = self.config["base_model"]
         self.consecutive_failures = 0
 
     # ------------------------------------------------------------- bookkeeping
@@ -140,8 +186,8 @@ class Orchestrator:
         snapshot = {
             "step": step, "run": self.run_dir.name, "ts": _now(),
             "latest_checkpoint_hf_path": latest_ckpt, "base_model": self.base_model,
-            "teacher_model": self.config.get("teacher_model", ""),
-            "G": 32, "TB": self.config.get("train_max_problems", 16),
+            "teacher_model": self.config["teacher_model"],
+            "G": 32, "TB": self.config["train_max_problems"],
             "max_evals_per_step": self.max_evals_per_step,
             "dry_run": self.dry_run,
             "teacher_prompt_sha256": protocol.content_hash([self.system_prompt]),
@@ -164,7 +210,8 @@ class Orchestrator:
         context = tools.render_context(
             self.run_dir, step, self.config, latest_ckpt, ROOT,
             cwd=staging, action_index=action_index, current_step_evals=evals,
-            max_evals_per_step=self.max_evals_per_step)
+            max_evals_per_step=self.max_evals_per_step,
+            reference_file=self.reference_file)
         (staging / "task_context.txt").write_text(context)
 
         self.event(step, "teacher_turn_start", action_index=action_index)
@@ -194,9 +241,8 @@ class Orchestrator:
             cwd=str(staging),
             log_path=str(staging / "teacher.log"),
             repo_root=str(ROOT),
-            model=self.config.get("teacher_model", ""),
-            timeout_s=int(self.config.get("teacher_timeout_s", 900)),
-            max_budget_usd=float(self.config.get("teacher_max_budget_usd", 0.0)),
+            model=self.config["teacher_model"],
+            timeout_s=int(self.config["teacher_timeout_s"]),
         )
         if not res.ok:
             raise protocol.ProtocolError(
@@ -252,8 +298,8 @@ class Orchestrator:
         action_index = 0
         while True:
             ed = step_dir / f"eval_{action_index}"
-            if (ed / "eval.summary.json").exists():
-                stats = tools.eval_stats_from_summary(ed / "eval.summary.json")
+            if (ed / "summary.json").exists():
+                stats = tools.eval_stats_from_summary(ed / "summary.json")
                 prev = self._prev_from_dir(ed, "evaluation")
                 evals.append({"action_index": action_index, **stats,
                               "teacher": self._teacher_from_log(ed), "resumed": True})
@@ -286,7 +332,7 @@ class Orchestrator:
             # circuit breaker: identical (decision, data) as the immediately prior
             # sub-action (across step boundaries too). Consecutive DIFFERENT evals
             # are allowed; the max_evals_per_step cap is the main anti-loop guard.
-            if self.config.get("halt_on_duplicate", True) and prev and \
+            if self.config["halt_on_duplicate"] and prev and \
                     protocol.is_duplicate_step(prev["decision"], prev["data_hash"],
                                                decision, data_hash):
                 raise protocol.ProtocolError(
@@ -394,7 +440,7 @@ class Orchestrator:
         train_stats = {
             "n_problems": len(rows),
             "truncated_extra_rows": max(0, len(rows) - int(
-                self.config.get("train_max_problems", 16))),
+                self.config["train_max_problems"])),
             "truncation_rate": metrics.get("response_length/clip_ratio"),
             "no_answer_rate": None,
             "metrics": metrics or None,
@@ -410,8 +456,8 @@ class Orchestrator:
             stats = self._stub_eval(step, sub_dir, latest_ckpt)
         else:
             stats = tools.run_evaluation(
-                sub_dir, step, latest_ckpt, self.config, ROOT,
-                int(self.config.get("eval_step_timeout_s", 3600)), action_index)
+                sub_dir, latest_ckpt, self.config, ROOT,
+                int(self.config["eval_step_timeout_s"]))
         self.event(step, "eval_done", action_index=action_index,
                    **(stats.get("eval") or {"status": stats["status"]}))
         return stats
@@ -424,9 +470,9 @@ class Orchestrator:
         else:
             stats = tools.run_train(
                 sub_dir, step, latest_ckpt, self.config, ROOT,
-                int(self.config.get("train_step_timeout_s", 3600)),
-                int(self.config.get("n_gpus", 8)),
-                int(self.config.get("train_max_problems", 16)))
+                int(self.config["train_step_timeout_s"]),
+                int(self.config["n_gpus"]),
+                int(self.config["train_max_problems"]))
         self.event(step, "train_done", action_index=action_index,
                    **(stats.get("train") or {"status": stats["status"]}))
         return stats
@@ -439,11 +485,11 @@ class Orchestrator:
                  "samples": [{"correct": True, "extracted": r["answer"],
                               "truncated": False, "n_tokens": 10} for _ in range(4)]}
                 for r in rows]
-        protocol.atomic_write_jsonl(sub_dir / "eval.records.jsonl", recs)
+        protocol.atomic_write_jsonl(sub_dir / "records.jsonl", recs)
         summary = {"tag": f"teacher_step{step}__teacher_eval", "n_problems": len(rows),
                    "samples_per_problem": 4, "pass@1": 1.0, "pass@4": 1.0,
                    "truncation_rate": 0.0, "no_answer_rate": 0.0, "dry_run": True}
-        protocol.atomic_write_json(sub_dir / "eval.summary.json", summary)
+        protocol.atomic_write_json(sub_dir / "summary.json", summary)
         return {"status": "ok", "action_wallclock_s": 0.0,
                 "eval": {"n_problems": len(rows), "pass_at_1": 1.0, "pass_at_k": 1.0,
                          "truncation_rate": 0.0, "no_answer_rate": 0.0}}
@@ -451,7 +497,7 @@ class Orchestrator:
     def _stub_train(self, step, sub_dir, latest_ckpt):
         """No-GPU: run the REAL converter, then fabricate a checkpoint dir."""
         rows = protocol.read_jsonl(sub_dir / "data.jsonl")[
-            : int(self.config.get("train_max_problems", 16))]
+            : int(self.config["train_max_problems"])]
         sys.path.insert(0, str(ROOT / "eval"))
         from to_verl_teacher_dataset import convert  # noqa: E402
         verl_rows = convert(rows)
@@ -475,12 +521,12 @@ class Orchestrator:
         self.event(-1, "run_start", steps=self.steps, dry_run=self.dry_run,
                    start_step=start, latest_ckpt=latest_ckpt,
                    max_evals_per_step=self.max_evals_per_step,
-                   teacher_model=self.config.get("teacher_model", ""))
+                   teacher_model=self.config["teacher_model"])
         if start:
             self.log(f"resuming: steps 0..{start-1} already complete; latest={latest_ckpt}")
 
         prev = None
-        abort_at = int(self.config.get("consecutive_failure_abort", 2))
+        abort_at = int(self.config["consecutive_failure_abort"])
         for step in range(start, self.steps):
             rp = self.run_dir / f"step_{step}" / "result.json"
             if rp.exists():  # idempotent: a step is closed only when its train ran
@@ -516,17 +562,23 @@ class Orchestrator:
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config", required=True)
-    ap.add_argument("--run-name", default="")
-    ap.add_argument("--steps", type=int, default=0,
-                    help="0 -> config default; N training (GRPO) steps")
-    ap.add_argument("--max-evals-per-step", type=int, default=0,
-                    help="0 -> config default; cap on evals before a step must train")
+    ap.add_argument("--steps", type=int, default=None,
+                    help="N training (GRPO) updates; overrides the config")
+    ap.add_argument("--max-evals-per-step", type=int, default=None,
+                    help="cap on evaluations before a step must train; overrides the config")
+    ap.add_argument("--output-path", default=None,
+                    help="where run_<timestamp>/ is created; overrides the config")
+    ap.add_argument("--reference-data", default=None,
+                    help="a single data file to copy into the run directory for the "
+                         "teacher to read; overrides the config. Omit for none.")
     ap.add_argument("--dry-run", action="store_true", help="no-GPU protocol self-test")
     ap.add_argument("--dry-always-eval", action="store_true",
                     help="dry-run cap harness: teacher only ever evaluates")
     a = ap.parse_args()
-    orch = Orchestrator(a.config, a.run_name, a.steps, a.dry_run,
+    orch = Orchestrator(a.config, a.dry_run, steps=a.steps,
                         max_evals_per_step=a.max_evals_per_step,
+                        output_path=a.output_path,
+                        reference_data=a.reference_data,
                         dry_always_eval=a.dry_always_eval)
     return orch.run()
 
