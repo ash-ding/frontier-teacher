@@ -8,12 +8,11 @@ parameters, the number of GPUs. You do not choose them, and nothing you write
 changes them. What varies between this run and a baseline run is the problems,
 and only the problems. That is the experiment.
 
-A training step consumes a fixed budget of rollouts. Spending it on problems the
-student always solves, or never solves, produces no gradient: GRPO normalises
-within a group, so a group whose rollouts all agree contributes nothing. What you
-are looking for is a set of problems that produces a strong, usable training
-signal for *this* student at *its current* ability — which you can only know by
-measuring.
+Every training step consumes the same fixed budget of rollouts, whatever you put
+in it. What that budget buys is up to the curriculum: you are looking for
+problems that produce a strong, usable training signal for *this* student at
+*its current* ability. What that means in practice is yours to work out, and
+measuring is how you find out.
 
 ## The two things you can do to the student
 
@@ -36,6 +35,25 @@ them deliberately and then commit.
 
 Deciding `train` — you may also write `pass`, which means the same thing — is how
 you say the curriculum is ready.
+
+## The reference test set
+
+After every training update, the student is evaluated on a fixed set of problems
+— the same set every step, and the same set in every run of this experiment.
+That evaluation is not yours to trigger and does not consume any of your
+evaluations; it happens on its own once the step closes. Its full results land
+in the run directory: the score, every problem, and the student's complete
+output for every sample.
+
+The base model is measured on it once before step 0, so the sequence has a
+starting point.
+
+**This is not the set you are being judged on.** The result that gets reported
+comes from a held-out set that this loop never touches and that you never see.
+The set you can read is a reference — it is there so that you, and we, can see
+where the student is between steps. The two overlap in kind, not in problems, so
+a number that moves on one because the curriculum was drawn from it does not
+move on the other.
 
 Anything that is not the student is yours to use freely. Read files, grep, run
 shell commands, compute, write scratch notes. Explore as much as you want. Just
@@ -78,6 +96,8 @@ run_<timestamp>/
                           repo-relative paths (evaluate.py, the verifiers, the
                           GRPO step script, the reward function, the converter)
   reference.jsonl         reference data, if the run was given any
+  test_base/              the reference test set run on the BASE model, before
+                          any training — same files as a step's test/ below
   events.jsonl            one line per event, whole run, in order
   metrics.jsonl           one line per completed sub-action: step, action_index,
                           type, status, your wall-clock and token counts, and the
@@ -109,8 +129,13 @@ run_<timestamp>/
                           any group carried gradient, response_length/clip_ratio
                           is the fraction that hit the token limit
       ckpt/…/huggingface  the new weights
-    result.json           the step's summary: every evaluation, the train, and
-                          the checkpoint the next step starts from
+    test/                 the reference test set, run on the checkpoint this
+                          step produced — same summary.json / records.jsonl /
+                          generations.jsonl as an eval_<M>/, over the fixed
+                          problems rather than yours
+    result.json           the step's summary: every evaluation, the train, the
+                          reference test score, and the checkpoint the next step
+                          starts from
 ```
 
 `records.jsonl` and `generations.jsonl` are the ones that repay reading closely.

@@ -131,7 +131,27 @@ def _trajectory_summary(run_dir, step):
         t = r.get("train")
         if t:
             lines.append(f"      train: n={t.get('n_problems')} metrics={t.get('metrics')}")
+        rt = r.get("reference_test")
+        if rt:
+            lines.append(
+                f"      reference test AFTER this train: n={rt.get('n_problems')} "
+                f"pass@1={rt.get('pass_at_1')} pass@k={rt.get('pass_at_k')} "
+                f"trunc={rt.get('truncation_rate')} no_answer={rt.get('no_answer_rate')}")
     return "\n".join(lines) if lines else "  (no prior steps -- this is step 0)"
+
+
+def _reference_test_line(run_dir):
+    """The base model's score on the reference test set, if it was measured."""
+    sp = Path(run_dir) / "test_base" / "summary.json"
+    if not sp.exists():
+        return None
+    try:
+        s = json.loads(sp.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    k = s.get("samples_per_problem")
+    return (f"  base model (before any training): n={s.get('n_problems')} "
+            f"pass@1={s.get('pass@1')} pass@{k}={s.get(f'pass@{k}')}")
 
 
 def _current_step_evals_summary(evals):
@@ -186,6 +206,7 @@ def render_context(run_dir, step, config, latest_ckpt, repo_root, *,
         _current_step_evals_summary(current_step_evals),
         "",
         "Every closed step before this one:",
+        *([_reference_test_line(run_dir)] if _reference_test_line(run_dir) else []),
         _trajectory_summary(run_dir, step),
         "",
         "Directories you can open:",
@@ -260,6 +281,22 @@ def _parse_verl_metrics(log_path):
 
 
 
+def run_test_evaluation(out_dir, model_path, config, repo_root, timeout_s):
+    """Evaluate a checkpoint on the run's FIXED reference test set.
+
+    Unlike run_evaluation, the problems are not the teacher's -- they are the
+    same set on every step of every run, so the numbers form a curve that can be
+    read across steps and across runs. Everything else (sampling, verifier,
+    sample count) is the settings the config pins, so this differs from the
+    teacher's own evaluations only in which problems it uses.
+
+    Lands summary.json / records.jsonl / generations.jsonl in `out_dir`.
+    """
+    return _evaluate(out_dir, model_path, config, repo_root, timeout_s,
+                     data=Path(repo_root) / config["test_data"],
+                     label="reference_test", log_name="test.log")
+
+
 def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
     """Evaluate the current checkpoint on the teacher's data via evaluate.py.
 
@@ -268,20 +305,27 @@ def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
     summary.json / records.jsonl / generations.jsonl there. `--limit 0` is
     uncapped. Returns a dict of eval stats (weights unchanged).
     """
-    step_dir = Path(step_dir)
-    step_data = step_dir / "data.jsonl"
+    return _evaluate(step_dir, model_path, config, repo_root, timeout_s,
+                     data=Path(step_dir) / "data.jsonl",
+                     label="teacher_eval", log_name="eval.log")
 
-    # Pure command line: the teacher writes fresh data every step, so there is
-    # no config to point at and nothing to register. Passing --config as well
-    # would be refused - a config and the command line are two ways to describe
-    # one run, not layers.
+
+def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
+              data, label, log_name):
+    """Shared body of the two evaluations: same settings, different problems.
+
+    Pure command line: the data is written moments earlier or lives outside
+    configs/, so there is no config to point at and nothing to register.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     tmpl = dict(config.get("teacher_eval", {}))
     base = dict(config.get("eval_base", {}))
     argv = [
         "python", str(EVAL_DIR / "evaluate.py"),
         "--model", str(model_path),
-        "--data", str(step_data),
-        "--label", "teacher_eval",
+        "--data", str(data),
+        "--label", label,
         "--samples", str(tmpl.get("n", 4)),
         "--verifier", tmpl.get("verifier", "symbolic"),
         "--max-tokens", str(tmpl.get("max_tokens", 4096)),
@@ -293,12 +337,12 @@ def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
         "--tensor-parallel-size", str(base.get("tensor_parallel_size", 1)),
         "--gpu-memory-utilization", str(base.get("gpu_memory_utilization", 0.90)),
         "--limit", "0",
-        "--output-path", str(step_dir),
+        "--output-path", str(out_dir),
     ]
-    rc, timed_out, wall = _stream(argv, step_dir / "eval.log", cwd=str(repo_root),
+    rc, timed_out, wall = _stream(argv, out_dir / log_name, cwd=str(repo_root),
                                   timeout_s=timeout_s)
 
-    summ_src = step_dir / "summary.json"
+    summ_src = out_dir / "summary.json"
     stats = {"status": "ok" if (rc == 0 and not timed_out) else "error",
              "action_wallclock_s": round(wall, 1), "returncode": rc,
              "timed_out": timed_out}

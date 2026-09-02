@@ -116,6 +116,7 @@ class Orchestrator:
         "halt_on_duplicate": True,
         "consecutive_failure_abort": 2,
         "pipeline_source": [],
+        "test_data": None,
         "reference_data": None,
         "eval_base": {},
         "teacher_eval": {},
@@ -459,12 +460,45 @@ class Orchestrator:
             return self._close_step(step, step_dir, evals, stats.get("train"),
                                     teacher, new_ckpt), prev
 
+    def run_reference_test(self, step, out_dir, model_path):
+        """Evaluate `model_path` on the run's fixed reference test set.
+
+        Runs once on the base model before step 0, and once after every training
+        update, always on the same problems -- so the sequence is a curve rather
+        than a set of unrelated numbers. It is not the deliverable: the reported
+        result comes from a held-out set this loop never touches. This one exists
+        so that the teacher, and we, can see where the student is.
+
+        Skipped entirely when no test_data is configured, and skipped on restart
+        if this checkpoint's evaluation is already on disk.
+        """
+        if not self.config["test_data"]:
+            return None
+        out_dir = Path(out_dir)
+        if (out_dir / "summary.json").exists():
+            stats = tools.eval_stats_from_summary(out_dir / "summary.json")
+            self.event(step, "reference_test_skip_completed", **stats)
+            return stats
+        self.event(step, "reference_test_start", model=model_path)
+        if self.dry_run:
+            stats = self._stub_eval(step, out_dir, model_path,
+                                    data=ROOT / self.config["test_data"])
+        else:
+            stats = tools.run_test_evaluation(
+                out_dir, model_path, self.config, ROOT,
+                int(self.config["eval_step_timeout_s"]))
+        self.event(step, "reference_test_done",
+                   **(stats.get("eval") or {"status": stats["status"]}))
+        return stats.get("eval") if stats.get("eval") else stats
+
     def _close_step(self, step, step_dir, evals, train_stats, train_teacher, new_ckpt):
         """Write the STEP SUMMARY result.json + run_state, emit step_done."""
+        ref_test = self.run_reference_test(step, step_dir / "test", new_ckpt)
         result = {
             "step": step, "status": "ok", "n_evals": len(evals),
             "evals": evals,
             "train": {**(train_stats or {}), "teacher": train_teacher},
+            "reference_test": ref_test,
             "latest_checkpoint_hf_path": new_ckpt,
         }
         protocol.atomic_write_json(step_dir / "result.json", result)
@@ -551,16 +585,21 @@ class Orchestrator:
                    **(stats.get("train") or {"status": stats["status"]}))
         return stats
 
-    def _stub_eval(self, step, sub_dir, latest_ckpt):
-        """No-GPU: synthesise a summary/records pair with the real schema."""
-        step_data = sub_dir / "data.jsonl"
-        rows = protocol.read_jsonl(step_data)
+    def _stub_eval(self, step, sub_dir, latest_ckpt, data=None):
+        """No-GPU: synthesise a summary/records pair with the real schema.
+
+        `data` names the problem file: a teacher evaluation grades the data.jsonl
+        it just wrote, the reference test grades the run's fixed test set.
+        """
+        sub_dir = Path(sub_dir)
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        rows = protocol.read_jsonl(data or (sub_dir / "data.jsonl"))
         recs = [{**r, "n": 4, "c": 4,
                  "samples": [{"correct": True, "extracted": r["answer"],
                               "truncated": False, "n_tokens": 10} for _ in range(4)]}
                 for r in rows]
         protocol.atomic_write_jsonl(sub_dir / "records.jsonl", recs)
-        summary = {"tag": f"teacher_step{step}__teacher_eval", "n_problems": len(rows),
+        summary = {"n_problems": len(rows),
                    "samples_per_problem": 4, "pass@1": 1.0, "pass@4": 1.0,
                    "truncation_rate": 0.0, "no_answer_rate": 0.0, "dry_run": True}
         protocol.atomic_write_json(sub_dir / "summary.json", summary)
@@ -596,6 +635,10 @@ class Orchestrator:
                    teacher_model=self.config["teacher_model"])
         if start:
             self.log(f"resuming: steps 0..{start-1} already complete; latest={latest_ckpt}")
+        if start == 0:
+            # The base model's score on the reference set. Without it the first
+            # post-training number has nothing to be compared against.
+            self.run_reference_test(-1, self.run_dir / "test_base", latest_ckpt)
 
         prev = None
         abort_at = int(self.config["consecutive_failure_abort"])

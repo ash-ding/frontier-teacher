@@ -166,6 +166,13 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
   problems consumed half the rollouts of one where it wrote 16, and neither
   matched the baseline. A train curriculum is now exactly `train_batch_size`
   rows or the run halts.
+- **The teacher's reference test set is not the held-out set.** 100 MATH-500
+  problems, evaluated after every teacher training step so the run has a curve.
+  The teacher can read them — they live in the run directory it browses — so
+  never quote a reference-test score as the experiment's result. `pass@1` on
+  the 100 is 0.420 for base Llama-3.2-3B against 0.3905 on the full 500, within
+  one stderr; the stratified draw is representative, but 100 problems is a
+  stderr of ~0.04.
 - **hydra writes its run dir relative to cwd.** Both training scripts launch
   from the repo root, where `outputs/` is now the shared bucket, so an
   unpinned verl launch drops `outputs/<date>/<time>/` of hydra config in with

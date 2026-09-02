@@ -179,6 +179,13 @@ decisions are written to `<run>/pipeline/` at startup, so the teacher reads what
 will actually run, and "what exactly ran" is answerable from the run directory
 months later.
 
+A fixed **reference test set** — 100 MATH-500 problems, stratified by level
+(`tools/make_test_set.py`) — is evaluated once on the base model and once after
+every training update, so the scores form a curve. Results land in
+`<run>/test_base/` and `<run>/step_<N>/test/`, generations included. It is not
+the deliverable: the reported result comes from a held-out set the loop never
+touches. The teacher can read this one, and the system prompt says so.
+
 Settings resolve the same way evaluation's do — command line, then the config
 file, then the script's default — so `--steps`, `--max-evals-per-step`,
 `--output-path` and `--reference-data` each override the config field of the

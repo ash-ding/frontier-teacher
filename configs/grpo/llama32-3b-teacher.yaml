@@ -56,6 +56,19 @@ ppo_mini_batch_size: 8        # -> 2 gradient updates over the batch
 train_step_timeout_s: 3600
 eval_step_timeout_s: 3600
 
+# --- the reference test set ----------------------------------------------------
+# Evaluated once on the base model and once after every training update, always
+# on the same problems, so the scores form a curve. 100 problems drawn from
+# MATH-500 stratified by its level distribution (tools/make_test_set.py).
+#
+# This is NOT the deliverable. The result we report comes from a held-out set
+# this loop never touches; this one exists so the teacher, and we, can see where
+# the student is. Its results live in the run directory, which the teacher
+# reads - so it can see these problems, and the fact that a curriculum drawn
+# from them would move this number and not the held-out one is something the
+# system prompt states plainly.
+test_data: data/benchmark/math500_ref100.jsonl
+
 # --- what the teacher may read -------------------------------------------------
 # One data file, copied into the run directory rather than mounted, so what the
 # teacher read is part of the run's record. Omit the field for none.
