@@ -115,6 +115,41 @@ def main():
             "mean_gen_tokens": s_.get("mean_gen_tokens"),
         })
 
+    # The per-step reference tests: the same fifth of each benchmark, run after
+    # every training update rather than only at the four milestones. Same
+    # sampling, same verifier and same decoding as the milestone evaluations --
+    # copied from configs/eval/ into the teacher config for exactly this reason
+    # -- so the two are independent draws of one quantity, and this one has 21
+    # points where the milestone split has 5.
+    per_step = defaultdict(list)
+    for run in sorted(outdir.glob("frontier-model/run_*")):
+        cfg = None
+        cj = run / "pipeline" / "config.resolved.json"
+        if cj.exists():
+            base = json.loads(cj.read_text())["student"]["base_model"]
+            cfg = {"unsloth/Llama-3.2-3B-Instruct": "llama32-3b"}.get(base)
+            if cfg is None:               # both Qwen runs share a base model
+                think = json.loads(cj.read_text())["evaluation"].get("enable_thinking")
+                cfg = "qwen3-4b-think" if think else "qwen3-4b-nothink"
+        if not cfg:
+            continue
+        for task in BENCHMARKS:
+            metric = HEADLINE[task]
+            for d, ro in [(run / "test_base" / task, 0)] + [
+                    (run / f"step_{k}" / "test" / task, (k + 1) * ROLLOUTS_PER_STEP)
+                    for k in range(64)]:
+                f = d / "summary.json"
+                if not f.exists():
+                    continue
+                sm = json.loads(f.read_text())
+                per_step[(cfg, task)].append({
+                    "rollouts": ro, "score": sm.get(metric),
+                    "stderr": sm.get(f"{metric}_stderr"),
+                    "n_problems": sm.get("n_problems"),
+                })
+    for v in per_step.values():
+        v.sort(key=lambda x: x["rollouts"])
+
     series = []
     for (cfg, band, variant, task), pts in sorted(points.items()):
         pts.sort(key=lambda x: x["rollouts"])
@@ -133,6 +168,8 @@ def main():
                        "points": full})
 
     doc = {"rollouts_per_step": ROLLOUTS_PER_STEP,
+           "per_step_reference": {f"{c}__{t}": v
+                                  for (c, t), v in sorted(per_step.items())},
            "benchmarks": BENCHMARKS,
            "headline_metric": HEADLINE,
            "baselines": {f"{c}__{t}": v for (c, t), v in sorted(baselines.items())},
@@ -142,6 +179,8 @@ def main():
 
     print(f"wrote {a.out}")
     print(f"  baselines: {len(baselines)}   series: {len(series)}")
+    for k, v in sorted(per_step.items()):
+        print(f"  per-step reference {k[0]}__{k[1]}: {len(v)} points")
     for s in series:
         xs = [p["rollouts"] for p in s["points"]]
         ys = [None if p["score"] is None else round(100 * p["score"], 1) for p in s["points"]]
