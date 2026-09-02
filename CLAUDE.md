@@ -159,6 +159,11 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
 - **The output tag follows the weights.** `--model <ckpt>` under a base model's
   config produces `<exp>__step<N>__<label>`, so a checkpoint cannot overwrite the
   baseline it is being compared against.
+- **hydra writes its run dir relative to cwd.** Both training scripts launch
+  from the repo root, where `outputs/` is now the shared bucket, so an
+  unpinned verl launch drops `outputs/<date>/<time>/` of hydra config in with
+  the results on the disk all three nodes share. Both pin
+  `hydra.run.dir="$CKPT/hydra"`; a new entry point must too.
 - **Command line, then config file, then the script's default** — one rule, in
   `eval/evaluate.py` and the teacher orchestrator alike. Setting a field in both
   places is allowed; the command line simply wins, and evaluation prints every

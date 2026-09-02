@@ -70,6 +70,10 @@ N=$(wc -l < "$TRAIN")
 # batch" this loop wants.
 TB=$N
 MB=$N
+# hydra writes its run dir relative to cwd, which is the repo root -- where
+# outputs/ is now a symlink to the shared bucket. Left alone, every launch drops
+# an outputs/<date>/<time>/ of hydra config beside the results, on the disk all
+# three nodes share. Pin it next to the checkpoints instead.
 mkdir -p "$CKPT" logs
 
 echo "=== teacher step ==="
@@ -78,6 +82,7 @@ echo "  G=$G  train_batch=$TB  mini_batch=$MB  -> $((TB*G)) rollouts, 1 update"
 echo "  max_response=$MAXRESP  gpus=$NGPU  vllm_util=$MEMUTIL  ckpt=$CKPT"
 
 python -m verl.trainer.main_ppo \
+  hydra.run.dir="$CKPT/hydra" \
   algorithm.adv_estimator=grpo \
   data.train_files="$TRAIN" \
   data.val_files="$TRAIN" \

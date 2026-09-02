@@ -106,6 +106,10 @@ EXP="${CFG}__${BAND}${TAG:-}"
 # to the shared bucket, so writing 26 GB of weights per checkpoint there would
 # push them over a fuse mount for no benefit: they are written, evaluated on the
 # same node, and deleted, and no other node ever reads them.
+# hydra writes its run dir relative to cwd, which is the repo root -- where
+# outputs/ is now a symlink to the shared bucket. Left alone, every launch drops
+# an outputs/<date>/<time>/ of hydra config beside the results, on the disk all
+# three nodes share. Pin it next to the checkpoints instead.
 CKROOT_BASE="$REPO/.local_checkpoints"
 CKPT="$CKROOT_BASE/$EXP"
 
@@ -129,6 +133,7 @@ echo "  G=$G  train_batch=$TB  mini_batch=$MB  -> $((TB*G)) rollouts/step, 20 st
 echo "  max_response=$MAXRESP  enable_thinking=${THINK:-n/a}  gpus=$NGPU  vllm_util=$MEMUTIL"
 
 python -m verl.trainer.main_ppo \
+  hydra.run.dir="$CKPT/hydra" \
   algorithm.adv_estimator=grpo \
   data.train_files="$REPO/$TRAIN" \
   data.val_files="$REPO/$TRAIN" \
