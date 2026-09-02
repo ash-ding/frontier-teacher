@@ -2,12 +2,12 @@
 # Fetch the exact verl source this project runs on, and check it against the
 # installed package.
 #
-#   scripts/fetch_verl_source.sh            fetch into third_party/, then verify
+#   scripts/fetch_verl_source.sh            fetch into package/, then verify
 #   scripts/fetch_verl_source.sh --verify   verify only, fetching if absent
 #
 # The source is deliberately not committed: 8.3 MB across 362 files would bury
 # this repository's own history in `git log` and `git grep`. The pin in
-# third_party/verl.lock reconstructs it exactly, which is what actually matters.
+# package/verl.lock reconstructs it exactly, which is what actually matters.
 #
 # READ-ONLY SNAPSHOT. Python imports verl from site-packages, not from here.
 # Editing this tree changes nothing. To modify verl, patch it and reinstall,
@@ -17,14 +17,14 @@ set -u
 cd "$(dirname "$0")/.."
 REPO="$PWD"
 # shellcheck disable=SC1091
-. "$REPO/third_party/verl.lock"
+. "$REPO/package/verl.lock"
 
-DEST="$REPO/third_party/verl-${VERL_COMMIT:0:7}"
+DEST="$REPO/package/verl-${VERL_COMMIT:0:7}"
 VERIFY_ONLY=0
 [ "${1:-}" = "--verify" ] && VERIFY_ONLY=1
 
 if [ ! -d "$DEST/verl" ]; then
-  echo "fetching verl $VERL_VERSION @ ${VERL_COMMIT:0:7} -> third_party/"
+  echo "fetching verl $VERL_VERSION @ ${VERL_COMMIT:0:7} -> package/"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
   curl -sSL --fail -m 600 -o "$tmp/src.tar.gz" \
@@ -76,6 +76,6 @@ print(f"  MISMATCH: {len(differ)} differ, {len(only_snap)} only in snapshot, "
 for f in (differ + only_snap + only_inst)[:10]:
     print("   ", f)
 print("  The installed verl is not the pinned commit. Either the environment was"
-      " changed, or third_party/verl.lock is stale.")
+      " changed, or package/verl.lock is stale.")
 raise SystemExit(1)
 PY

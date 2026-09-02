@@ -12,7 +12,7 @@ vllm==0.27.1
 # GRPO and the rest of the RL stack. Pulls transformers back to 5.10.x and
 # antlr4 to 4.9.3 via hydra-core - both fine, see the math-verify note below.
 verl==0.9.0                 # = commit 483b8a0 of verl-project/verl, tag v0.9.0.
-                            # Verified byte-identical; see third_party/verl.lock
+                            # Verified byte-identical; see package/verl.lock
                             # and scripts/fetch_verl_source.sh --verify.
 
 # Symbolic answer equivalence for MATH and HMMT, whose answers are exact forms
