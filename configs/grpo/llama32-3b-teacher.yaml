@@ -17,7 +17,7 @@
 # read.
 
 # --- teacher (a frontier model, driven through `claude -p`) --------------------
-teacher_model: opus-4.8       # alias passed to `claude --model`
+teacher_model: claude-opus-4-8     # alias passed to `claude --model`
 teacher_timeout_s: 1800       # kill a teacher turn that runs longer than this.
                               # The claude CLI has no turn cap, so this is the
                               # only guard against a turn that will not end.

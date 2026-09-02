@@ -103,7 +103,7 @@ class Orchestrator:
         "steps": 4,
         "max_evals_per_step": 10,
         "output_path": "outputs/frontier-model",
-        "teacher_model": "opus-4.8",
+        "teacher_model": "claude-opus-4-8",
         "teacher_timeout_s": 1800,
         "base_model": "unsloth/Llama-3.2-3B-Instruct",
         "grpo_config": "llama32-3b",
