@@ -78,6 +78,11 @@ DEFAULTS = {
 }
 
 
+# `model`, `data` and `label` have no default - a run must say what it evaluated -
+# so they are settings without a DEFAULTS entry.
+SETTINGS = set(DEFAULTS) | {"model", "data", "label"}
+
+
 PROMPT = ("Solve the following math problem. Reason step by step, and put your "
           "final answer within \\boxed{{}}.\n\n{problem}")
 
@@ -152,6 +157,14 @@ def resolve(args):
     """
     cfg = yaml.safe_load(open(args.config)) if args.config else {}
     cfg = {k: v for k, v in cfg.items() if v is not None}
+    # A key nobody reads does nothing and says nothing. Three of these survived
+    # the refactor in every config, still naming settings that had been deleted.
+    unknown = sorted(set(cfg) - SETTINGS)
+    if unknown:
+        raise SystemExit(
+            f"{args.config}: {', '.join(unknown)} "
+            f"{'is' if len(unknown) == 1 else 'are'} not a setting. "
+            f"Known: {', '.join(sorted(SETTINGS))}")
 
     cli = {
         "samples": args.samples, "max_tokens": args.max_tokens,
