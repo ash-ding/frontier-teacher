@@ -1,0 +1,58 @@
+# Evaluation config for Qwen3-4B with reasoning disabled.
+#
+# Everything here is a default: eval/evaluate.py takes the same settings on the
+# command line and the command line wins, so a checkpoint sweep needs no copies
+# of this file.
+#
+# Every task names its verifier. There are two and only two - AIME's answers are
+# integers 0-999 by the competition's rules, everything else is exact forms that
+# need symbolic comparison - and naming it here means no rule is buried in the
+# evaluation loop.
+name: qwen3-4b-nothink
+model: Qwen/Qwen3-4B
+enable_thinking: false      # Qwen3 only. false injects an empty <think></think>.
+# Decoding: the vendor's own recommended preset. Training uses the same values,
+# so a benchmark change cannot come from the two sampling differently.
+temperature: 0.7
+top_p: 0.8
+top_k: 20
+seed: 1234
+tensor_parallel_size: 1
+gpu_memory_utilization: 0.90
+max_tokens: 8192
+max_model_len: 16384
+
+tasks:
+  math500:
+    n: 4
+    verifier: symbolic
+    headline_metric: "pass@1"
+    data_files: [benchmark/math500.jsonl]
+
+  aime:
+    n: 8
+    verifier: exact_integer     # 0-999 integers; exact comparison, no ambiguity
+    headline_metric: "pass@4"
+    data_files: [benchmark/aime_2020.jsonl, benchmark/aime_2021.jsonl,
+                 benchmark/aime_2022.jsonl, benchmark/aime_2023.jsonl,
+                 benchmark/aime_2024.jsonl]
+
+  hmmt:
+    n: 16                       # 93 problems, so 16 samples is cheap and gives pass@1..16
+    verifier: symbolic          # 42 of 93 answers are exact forms, not integers
+    headline_metric: "pass@4"
+    data_files: [benchmark/hmmt_feb_2025.jsonl, benchmark/hmmt_nov_2025.jsonl,
+                 benchmark/hmmt_feb_2026.jsonl]
+
+  hmmt_feb_2025: {n: 16, verifier: symbolic, headline_metric: "pass@4", data_files: [benchmark/hmmt_feb_2025.jsonl]}
+  hmmt_nov_2025: {n: 16, verifier: symbolic, headline_metric: "pass@4", data_files: [benchmark/hmmt_nov_2025.jsonl]}
+  hmmt_feb_2026: {n: 16, verifier: symbolic, headline_metric: "pass@4", data_files: [benchmark/hmmt_feb_2026.jsonl]}
+
+  # Difficulty profiling over the training pool. Lands in its own subdirectory so
+  # 12k-problem records do not sit beside benchmark results.
+  mathtrain:
+    n: 8
+    verifier: symbolic
+    out_subdir: math_profiling
+    data_files: [training_set/math_train_orig_train.jsonl,
+                 training_set/math_train_orig_test.jsonl]

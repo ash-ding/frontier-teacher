@@ -14,7 +14,7 @@ Everything below runs on three 8×H100 nodes under one shared environment
 Nine runs (3 configurations × 3 difficulty bands) plus all three
 matched-group-size controls are complete; `docs/experiment.md` §7 has the design, the results, and
 the operational failures worth knowing about. The report is rendered by
-`src/render_report.py` from `outputs/curves.json`.
+`tools/render_report.py` from `outputs/curves.json`.
 
 - [ ] **The thinking hard band has no 10,240-rollout endpoint.** It OOMed at step
       19 of 20 and its final checkpoint does not exist. Four points, ringed in the

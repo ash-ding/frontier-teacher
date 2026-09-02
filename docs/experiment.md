@@ -269,7 +269,7 @@ not of the problem. Read it with the manifest's `profiled_with` block.
 ## 5. Grading calibration
 
 A score is only worth as much as the parser under it, and a parser that fails
-silently is indistinguishable from a weak model. `src/calibrate_grading.py`
+silently is indistinguishable from a weak model. `eval/calibrate.py`
 exercises `grade()` on known inputs — no GPU — so any failure is unambiguously a
 harness bug:
 
@@ -317,7 +317,7 @@ Nine runs: three model configurations × three bands of measured pass@1 (low but
 not zero, ~50%, high but not one). Each run is 20 optimisation steps consuming
 512 rollouts per step, so all nine sit on a shared x-axis of 10,240 student
 rollouts, with checkpoints every 5 steps evaluated on all three benchmarks by
-the unchanged `src/evaluate.py`.
+the unchanged `eval/evaluate.py`.
 
 **Group size follows the band.** A GRPO group whose G rollouts are all wrong (or
 all right) has zero advantage and contributes no gradient; the wasted fraction is

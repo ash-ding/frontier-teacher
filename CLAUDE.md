@@ -17,7 +17,7 @@ an experiment — several obvious ones have already been run or ruled out.
 | `data/benchmark/` | MATH-500, AIME 2020–2024, HMMT (Feb 2025 / Nov 2025 / Feb 2026) |
 | `data/training_set/` | the 11,996-problem MATH pool, split by original provenance |
 | `data/further_improve/<model>/` | curated subsets by measured pass@1, with a `manifest.json` recording the decoding settings each was measured under |
-| `src/evaluate.py` | the only evaluation path. `PROMPT` at the top is the single source of the prompt — training must use the same one |
+| `eval/evaluate.py` | the only evaluation path. `PROMPT` at the top is the single source of the prompt — training must use the same one |
 | `src/grading.py` | `grade()`; the reward function wraps this so training and evaluation cannot disagree |
 | `outputs/` | summaries and per-problem records are tracked in git; generations and profiling bulk are not |
 
@@ -30,7 +30,7 @@ apparent antlr4 conflict with verl's hydra pinning dissolves under the
 `antlr4_9_3` extra, and a split environment means training and evaluation can
 grade differently.
 
-Do not add matplotlib. Figures are hand-written SVG (`src/render_report.py`)
+Do not add matplotlib. Figures are hand-written SVG (`tools/render_report.py`)
 precisely so rendering never touches an environment that running jobs depend on.
 
 ## verl's source
@@ -57,12 +57,12 @@ environment change.
 ## Running things
 
 ```bash
-scripts/run_grpo.sh <config> <band> [n_gpus]     # one GRPO run
-scripts/run_one.sh  <config> <band>              # train then evaluate
-scripts/eval_checkpoints.sh <config> <band> 8    # Llama / non-thinking: one job per GPU
-scripts/eval_sharded.sh     <config> <band> 8    # thinking: one job at a time, sharded across GPUs
-python src/collect_curves.py && python src/paired_stats.py && python src/render_report.py
-python src/check_baselines.py && python src/geomcheck.py outputs/report.html
+train/grpo/run_grpo.sh <config> <band> [n_gpus]     # one GRPO run
+train/grpo/run_one.sh  <config> <band>              # train then evaluate
+eval/run_checkpoints.sh <config> <band> 8    # Llama / non-thinking: one job per GPU
+eval/run_sharded.sh     <config> <band> 8    # thinking: one job at a time, sharded across GPUs
+python src/collect_curves.py && python src/paired_stats.py && python tools/render_report.py
+python eval/check_baselines.py && python src/geomcheck.py outputs/report.html
 ```
 
 `GROUP_SIZE=32` forces the group size; `TAG=__g32` suffixes the experiment name
@@ -87,7 +87,7 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
 - **Baselines drift between nodes and fail silently.** A stale copy has record
   ids `aime-0000` where the harness now emits `aime-2020-00`. Scores match, so
   nothing looks wrong; the paired analysis just finds an empty intersection and
-  drops the cell. Run `src/check_baselines.py` before trusting any comparison.
+  drops the cell. Run `eval/check_baselines.py` before trusting any comparison.
 - **Pushing a fix is not delivering it.** Orchestrators `git checkout` once at
   startup and never re-sync. A converter fix reached the repo 40 minutes before
   the run it would have saved, and that run still died on the old code.

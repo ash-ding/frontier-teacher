@@ -1,22 +1,15 @@
-# outputs/ is both the working directory that evaluate.py writes to and the
-# record of what was measured - there is no second copy to drift out of sync.
-# Track summaries and per-problem records; leave out what is either huge or an
-# intermediate. A re-run that changes a result shows up in `git status`.
+# outputs/ is a symlink to ~/data/frontier-teacher/outputs on the shared bucket,
+# so all three nodes read and write one set of results. Results are therefore
+# durable on 1 PB of object storage rather than on a container disk, and git no
+# longer needs to carry 30 MB of them. Cross-node visibility is eventual: a file
+# written on one node takes minutes to appear on another. Same-node
+# read-after-write is immediate, which is what the evaluation scripts rely on.
 #
-# Benchmark runs land at the top level; training-pool profiling runs land in
-# math_profiling/, whose records are 12-36 MB and stay untracked.
-outputs/*
-!outputs/*.summary.json
-!outputs/*.records.jsonl
-# shard intermediates, superseded by the merged file
-outputs/*__s[0-9]of[0-9].*
-outputs/shards/
-
-# profiling: keep the summaries, leave the bulk on the compute nodes
-!outputs/math_profiling/
-outputs/math_profiling/*
-!outputs/math_profiling/*.summary.json
-outputs/math_profiling/*__s[0-9]of[0-9].summary.json
+# outputs/ was tracked before this. That history is intact; results committed up
+# to then are still in the repository.
+outputs
+outputs.bak
+.local_checkpoints/
 
 # Raw generations: ~880 MB per model. Live on the compute nodes under
 # $HOME/data/frontier-teacher/generations/.
@@ -39,9 +32,8 @@ __pycache__/
 # scratch: cross-validation reruns during the environment migration
 outputs_xval/
 
-# verl-format conversions of the subsets; regenerate with src/to_verl_dataset.py
+# verl-format conversions of the subsets; regenerate with train/grpo/to_verl_dataset.py
 *.verl.jsonl
-outputs/checkpoints/
 
 # package/ holds a read-only snapshot of verl's source, fetched by
 # scripts/fetch_verl_source.sh at the commit pinned in package/verl.lock.

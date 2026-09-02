@@ -178,7 +178,7 @@ so the correct extra here is `antlr4_9_3` — not `antlr4_13_2`, which is right
 only for an evaluation-only environment. A mismatch does not raise: the LaTeX
 parser degrades *silently*, failing to parse and depressing every score. A
 grading path that fails quietly is worse than one that crashes, because the
-result still looks like a number. `src/calibrate_grading.py` is what proves the
+result still looks like a number. `eval/calibrate.py` is what proves the
 installed combination actually works.
 
 ### Evaluation and training share one environment
@@ -263,7 +263,7 @@ Llama at 32 samples; Qwen thinking takes hours):
 
 ```bash
 ./scripts/run_profile.sh llama32-3b
-python src/merge_shards.py --config configs/llama32-3b.yaml --task mathtrain
+python eval/merge_shards.py --config configs/llama32-3b.yaml --task mathtrain
 python src/profile_report.py --records outputs/llama32-3b__mathtrain.records.jsonl
 python src/make_subsets.py --model llama32-3b
 ```
@@ -413,7 +413,7 @@ An HMMT score is only worth reading if the parser can actually read HMMT
 answers, and this matters more here than usual: the reason to run these sets is
 to compare competitions against a training cutoff, and a parser that failed
 differently across competitions would look exactly like the effect being tested
-for. `src/calibrate_grading.py` exercises `grade()` on known inputs — no GPU
+for. `eval/calibrate.py` exercises `grade()` on known inputs — no GPU
 time — so a failure is unambiguously a harness bug rather than a weak model:
 
 | Check | What it catches |
@@ -424,7 +424,7 @@ time — so a failure is unambiguously a harness bug rather than a weak model:
 | thinking | Identity again behind a `</think>` tag, since thinking models are graded only on what follows it. |
 
 ```bash
-python src/calibrate_grading.py --data data/benchmark/hmmt_*.jsonl
+python eval/calibrate.py --data data/benchmark/hmmt_*.jsonl
 ```
 
 All four pass at 100% on MATH-500 (500), AIME (150) and HMMT (93).
@@ -444,11 +444,11 @@ The data is redistributed from MathArena under CC BY-NC-SA 4.0.
 
 The nine GRPO runs and their controls are written up in
 [`docs/experiment.md`](docs/experiment.md) §7, and rendered as a figure by
-`src/render_report.py` from `outputs/curves.json`:
+`tools/render_report.py` from `outputs/curves.json`:
 
 ```
 python src/collect_curves.py                    # summaries -> outputs/curves.json
-python src/render_report.py --out report.html   # 3x3 small multiples, no plotting deps
+python tools/render_report.py --out report.html   # 3x3 small multiples, no plotting deps
 ```
 
 Headline: every configuration except Qwen3-4B-thinking gains in-domain from plain
@@ -532,7 +532,7 @@ Raw generations (~880 MB per profiled model) and the per-problem profiling
 records over the 12k pool (12–36 MB each) are not tracked. They live on the
 compute nodes under `$HOME/data/frontier-teacher/generations/` and `outputs/`
 respectively, and the records are rebuildable from the shards with
-`src/merge_shards.py`.
+`eval/merge_shards.py`.
 
 Raw generations were only ever written for the training-pool profiling runs.
 `run_all.sh` does not pass `--save-generations`, so the reasoning traces behind
