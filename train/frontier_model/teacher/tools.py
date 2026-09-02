@@ -513,6 +513,9 @@ def run_train(step_dir, model_path, config, repo_root, timeout_s):
     """
     step_dir = Path(step_dir)
     rows = protocol.read_jsonl(step_dir / "data.jsonl")
+    # Training needs every card, and verl dies on an occupied one exactly as
+    # vLLM does -- a leftover engine holding 73.9 GB took a run down at step 2.
+    wait_gpus_free(int(config["n_gpus"]))
 
     # convert in-process (deterministic, no subprocess) so a converter error is a
     # clean ProtocolError rather than a shell exit code.
