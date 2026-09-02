@@ -336,6 +336,36 @@ def run_evaluation(step_dir, model_path, config, repo_root, timeout_s):
                      label="teacher_eval", log_name="eval.log")
 
 
+def wait_gpus_free(n_gpus, need_gib=60, timeout_s=600, log=print):
+    """Block until `n_gpus` cards have `need_gib` free, or give up and say so.
+
+    vLLM refuses to start when a card is already occupied -- "Free memory on
+    device cuda:0 is less than desired GPU memory utilization" -- and that is a
+    hard failure that halts the loop. The occupant is usually the previous
+    action's engine, a second or two from exiting. Waiting costs nothing;
+    not waiting cost a run at step 4.
+    """
+    t0 = time.time()
+    while True:
+        try:
+            out = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.total,memory.used",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=60).stdout
+            free = [(int(t) - int(u)) / 1024 for t, u in
+                    (l.split(",") for l in out.strip().splitlines() if l.strip())]
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return True          # cannot tell -> do not block the run on it
+        ready = sum(f >= need_gib for f in free)
+        if ready >= n_gpus:
+            return True
+        if time.time() - t0 > timeout_s:
+            log(f"  [gpu] only {ready}/{n_gpus} card(s) free after "
+                f"{timeout_s}s; starting anyway")
+            return False
+        time.sleep(10)
+
+
 def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
               data, label, log_name, overrides=None, num_shards=1):
     """Shared body of every evaluation the loop runs.
@@ -357,6 +387,7 @@ def _evaluate(out_dir, model_path, config, repo_root, timeout_s, *,
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    wait_gpus_free(num_shards)
     tmpl = {**dict(config.get("teacher_eval", {})), **(overrides or {})}
     base = dict(config.get("eval_base", {}))
     argv = [

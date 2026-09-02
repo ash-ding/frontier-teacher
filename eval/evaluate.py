@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -300,14 +301,53 @@ def main():
     print(f"  -> summary{stem}.json  records{stem}.jsonl  generations{stem}.jsonl")
 
 
+def _kill_descendants():
+    """SIGKILL every process descended from this one, by PID.
+
+    vLLM runs its engine as a child process (`VLLM::EngineCore`), and an
+    orderly shutdown is what normally reaps it. We do not get an orderly
+    shutdown (see below), so we reap it ourselves - otherwise it is reparented
+    to init and sits on 75 GB of a GPU until someone notices, and the NEXT
+    evaluation dies at engine init with "Free memory on device cuda:0 is less
+    than desired GPU memory utilization". That has halted a run.
+
+    Only our own descendants, resolved through /proc. Never a name pattern:
+    `pkill -f` has killed the ssh session running it twice in this project.
+    """
+    ppid_of = {}
+    for e in os.listdir("/proc"):
+        if not e.isdigit():
+            continue
+        try:
+            with open(f"/proc/{e}/status") as f:
+                for line in f:
+                    if line.startswith("PPid:"):
+                        ppid_of[int(e)] = int(line.split()[1])
+                        break
+        except OSError:
+            continue
+    me, doomed, frontier = os.getpid(), [], {os.getpid()}
+    while frontier:
+        kids = {p for p, pp in ppid_of.items() if pp in frontier and p != me}
+        doomed += kids
+        frontier = kids
+    for pid in reversed(doomed):          # deepest first
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     main()
     # vLLM's shutdown intermittently hangs: the results are on disk and the GPU
     # is idle, but the process never exits and whatever is waiting on it waits
     # forever. It cost a teacher run 35 minutes on one evaluation, and would
     # have cost the eval-step timeout - an hour - on every step it hit.
-    # main() has flushed and closed every output file by here, so there is
-    # nothing left for an orderly shutdown to do that we need.
+    # main() has flushed and closed every output file by here, so an orderly
+    # shutdown has nothing left to do that we need - except reap the engine,
+    # which we therefore do ourselves first.
     sys.stdout.flush()
     sys.stderr.flush()
+    _kill_descendants()
     os._exit(0)

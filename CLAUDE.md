@@ -169,8 +169,11 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
 - **vLLM's shutdown hangs intermittently, and it looks like a slow job.** The
   results are already written and the GPU sits at 0% while the process holds
   75 GB and never exits; anything waiting on it waits forever. `evaluate.py`
-  therefore ends in `os._exit(0)` once its files are on disk. Kill a stuck one
-  by PID - the results it already wrote are valid and the caller picks them up.
+  therefore ends by SIGKILLing its own descendants and then `os._exit(0)`, once
+  its files are on disk. Both halves matter: exiting without reaping leaves
+  `VLLM::EngineCore` orphaned on 75 GB, and the *next* evaluation then dies at
+  engine init - which halted a teacher run at step 4. Kill a stuck one by PID;
+  the results it already wrote are valid and the caller picks them up.
 - **The teacher's reference test set is not the held-out set.** 100 MATH-500
   problems, evaluated after every teacher training step so the run has a curve.
   The teacher can read them — they live in the run directory it browses — so
