@@ -8,6 +8,7 @@
   --ink:#12131a; --ink-2:#4e5261; --ink-3:#7b8095;
   --rule:#dcdfe7; --rule-2:#c3c8d4;
   --s0:#5b6478; --s1:#eb6834; --s2:#1baf7a; --s3:#4a3aa7; --s4:#a8afbd;
+  --sT:#b0217a;
   --accent:#4a3aa7;
   --shadow:0 1px 2px rgba(18,19,26,.05),0 8px 24px -12px rgba(18,19,26,.18);
 }
@@ -17,6 +18,7 @@
     --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
     --rule:#2e2e33; --rule-2:#3d3d44;
     --s0:#a8afbd; --s1:#d95926; --s2:#199e70; --s3:#9085e9; --s4:#5b6478;
+    --sT:#f06fb4;
     --accent:#9085e9;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
   }
@@ -26,6 +28,7 @@
   --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8d8d93;
   --rule:#2e2e33; --rule-2:#3d3d44;
   --s0:#a8afbd; --s1:#d95926; --s2:#199e70; --s3:#9085e9; --s4:#5b6478;
+  --sT:#f06fb4;
   --accent:#9085e9;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.7);
 }
@@ -39,6 +42,10 @@ body{
 h1,h2,h3,.lab,th,.colhead,.rowlab,.legend,.tick,.endlab{
   font-family:Archivo,"Helvetica Neue",Arial,sans-serif;
 }
+h2.sec{font-size:23px;font-weight:700;letter-spacing:-.012em;margin:52px 0 6px;
+  padding-top:26px;border-top:1px solid var(--rule)}
+p.seclede{font-size:15.5px;color:var(--ink-2);max-width:74ch;margin:0 0 22px;
+  font-family:Literata,Georgia,serif}
 h1{font-size:clamp(30px,4.4vw,46px);font-weight:700;letter-spacing:-.022em;
    line-height:1.08;margin:0 0 14px;text-wrap:balance}
 .sub{font-size:19px;color:var(--ink-2);max-width:62ch;margin:0 0 34px}
@@ -68,7 +75,7 @@ a{color:var(--accent)}
 .swatch{width:22px;height:3px;border-radius:2px;display:inline-block}
 .k0 .swatch{background:var(--s0)} .k1 .swatch{background:var(--s1)}
 .k2 .swatch{background:var(--s2)} .k3 .swatch{background:var(--s3)}
-.k4 .swatch{background:var(--s4)}
+.k4 .swatch{background:var(--s4)} .kT .swatch{background:var(--sT);height:4px}
 tr.variant td{color:var(--ink-2)}
 tr.variant td:nth-child(2){font-style:italic}
 .dashkey .swatch{background:linear-gradient(90deg,var(--ink-3) 60%,transparent 60%);
@@ -108,6 +115,8 @@ tr.variant td:nth-child(2){font-style:italic}
 .s2{stroke:var(--s2)} circle.s2{fill:var(--s2)} text.s2{fill:var(--s2);stroke:none}
 .s3{stroke:var(--s3)} circle.s3{fill:var(--s3)} text.s3{fill:var(--s3);stroke:none}
 .s4{stroke:var(--s4)} circle.s4{fill:var(--s4)} text.s4{fill:var(--s4);stroke:none}
+.sT{stroke:var(--sT);stroke-width:3.1} circle.sT{fill:var(--sT);r:3.9}
+text.sT{fill:var(--sT);stroke:none}
 
 /* table */
 .tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:9px;
@@ -165,6 +174,11 @@ no teacher: the control that a teacher-side method has to beat.</p>
   <span style="color:var(--ink-3)">dotted rule = untrained baseline · label = change from it</span>
 </div>
 
+<h2 class="sec">1 &middot; Fixed difficulty bands</h2>
+<p class="seclede">Each curriculum is a slice of the 11,996-problem MATH pool held
+  fixed for the whole run, cut by the student's own measured pass@1. This is the
+  control the teacher has to beat.</p>
+
 <div class="gridwrap">
   <div class="colheads"><div class="colhead"></div><!--COLHEADS--></div>
   <div class="grid"><!--GRID--></div>
@@ -174,6 +188,23 @@ no teacher: the control that a teacher-side method has to beat.</p>
   three models sit at very different absolute levels, and a shared axis would
   flatten every curve into a line. Compare <em>within</em> a panel; read across
   panels using the labelled change from baseline.</p>
+
+<h2 class="sec">2 &middot; The same panels, with a teacher-written curriculum</h2>
+<p class="seclede">Claude Opus 4.8 chose 16 problems per step, after evaluating the
+  current checkpoint on problems it wrote itself. It was given no reference data
+  and never saw these curves. Everything else — student, group size, batch size,
+  sampling, GPU count — is identical to the bands above, so the problems are the
+  only thing that differs. <!--TEACHER_STATUS--></p>
+
+<div class="legend">
+  <span class="key kT"><i class="swatch"></i> teacher — curriculum written per step</span>
+  <span style="color:var(--ink-3)">bands as above, unchanged</span>
+</div>
+
+<div class="gridwrap">
+  <div class="colheads"><div class="colhead"></div><!--COLHEADS_2--></div>
+  <div class="grid"><!--GRID_TEACHER--></div>
+</div>
 
 <h2>What the panels show</h2>
 <!--FINDINGS-->

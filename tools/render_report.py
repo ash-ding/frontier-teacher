@@ -37,11 +37,17 @@ BANDS = [
     (["pass1_40-60pct", "pass1_37-62pct"], "medium", "2"),
     (["pass1_85-95pct", "pass1_75-87pct"], "easy",   "3"),
     (["pass1_eq_1"],                       "p1",     "4"),
+    # Not a band: the curriculum a frontier model wrote, step by step, after
+    # evaluating the student itself. It is drawn on the same axes because it
+    # spent the same 512 rollouts per step for the same 20 steps -- the whole
+    # point is that the problems are the only thing that differs.
+    (["teacher"],                          "teacher", "T"),
 ]
 BAND_LABEL = {"p0": "p = 0 (never solved when profiled)",
               "hard": "hard (low pass@1)", "medium": "medium (≈50%)",
               "easy": "easy (high pass@1)",
-              "p1": "p = 1 (always solved when profiled)"}
+              "p1": "p = 1 (always solved when profiled)",
+              "teacher": "teacher-written curriculum"}
 W, H = 300, 190
 PAD_L, PAD_R, PAD_T, PAD_B = 46, 16, 14, 30
 
@@ -54,10 +60,11 @@ def role_of(band):
 
 
 def slot_of(role):
-    return {"p0": "0", "hard": "1", "medium": "2", "easy": "3", "p1": "4"}[role]
+    return {"p0": "0", "hard": "1", "medium": "2", "easy": "3", "p1": "4",
+            "teacher": "T"}[role]
 
 
-def panel(series, task, cfg):
+def panel(series, task, cfg, teacher=False):
     """One SVG panel: every band of one configuration on one benchmark.
 
     Every band is a solid line. p=0 and p=1 used to be dotted, marking them as
@@ -73,7 +80,8 @@ def panel(series, task, cfg):
     # consistently - which a table row states better than a line the eye has to
     # separate from its own default.
     rows = [s for s in series if s["config"] == cfg and s["task"] == task
-            and role_of(s["band"]) and not s.get("variant")]
+            and role_of(s["band"]) and not s.get("variant")
+            and (teacher or role_of(s["band"]) != "teacher")]
     if not rows:
         return f'<div class="panel empty">no data</div>'
 
@@ -185,18 +193,31 @@ def main():
             stats[(r["config"], r["band"], r["variant"], r["task"], r["metric"])] = r
     body = Path(str(ROOT / "tools" / "report_template.html")).read_text()
 
-    grid = []
-    for tkey, tname, metric, kind in TASKS:
-        grid.append(f'<div class="rowlab"><span class="tname">{tname}</span>'
-                    f'<span class="tmetric">{metric}</span>'
-                    f'<span class="tkind">{kind}</span></div>')
-        for ckey, cname, _ in CONFIGS:
-            grid.append(panel(series, tkey, ckey))
-    body = body.replace("<!--GRID-->", "\n".join(grid))
+    def build_grid(with_teacher):
+        g = []
+        for tkey, tname, metric, kind in TASKS:
+            g.append(f'<div class="rowlab"><span class="tname">{tname}</span>'
+                     f'<span class="tmetric">{metric}</span>'
+                     f'<span class="tkind">{kind}</span></div>')
+            for ckey, cname, _ in CONFIGS:
+                g.append(panel(series, tkey, ckey, teacher=with_teacher))
+        return "\n".join(g)
+
+    body = body.replace("<!--GRID-->", build_grid(False))
+    body = body.replace("<!--GRID_TEACHER-->", build_grid(True))
+    # Say which configurations have a teacher run rather than letting a missing
+    # line read as a flat one.
+    have = sorted({x["config"] for x in series if x["band"] == "teacher"})
+    missing = [n for k, n, _ in CONFIGS if k not in have]
+    body = body.replace("<!--TEACHER_STATUS-->",
+                        ("Still running: " + ", ".join(missing) +
+                         " &mdash; those panels show the bands only."
+                         if missing else "All three configurations have a teacher run."))
 
     heads = "".join(f'<div class="colhead"><span>{n}</span><em>{r}</em></div>'
                     for _, n, r in CONFIGS)
     body = body.replace("<!--COLHEADS-->", heads)
+    body = body.replace("<!--COLHEADS_2-->", heads)
 
     # the table is not decoration: the aqua series fails 3:1 contrast against the
     # light surface, so a non-colour reading of every value has to exist

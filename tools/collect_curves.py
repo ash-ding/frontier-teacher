@@ -10,6 +10,15 @@ common x-axis.
 
   baseline (step 0)  outputs/benchmarks/{config}__{task}/summary.json
   checkpoints        outputs/grpo/{config}__{band}__step{N}__{task}/summary.json
+  teacher runs       outputs/frontier-model/run_*/final_eval/
+                       {config}__teacher__step{N}__{task}/summary.json
+
+A teacher run is emitted as the pseudo-band `teacher` so it sits beside the
+fixed bands on the same axes. Its checkpoints are numbered differently: a
+baseline run is one verl job whose global_step counts optimiser steps from 1
+(5/10/15/20), while a teacher run is twenty separate jobs each producing
+global_step_1, so the milestone is the loop's own step index from 0 (4/9/14/19).
+Both mean the same rollout counts, and both are converted here.
 
 Identity comes from the directory name, not a filename: one evaluation is one
 directory holding summary.json, records.jsonl and generations.jsonl.
@@ -42,6 +51,7 @@ HEADLINE = {"math500": "pass@1", "aime": "pass@4", "hmmt": "pass@4"}
 CKPT = re.compile(r"^(?P<cfg>.+?)__(?P<band>pass1_.+?)(?:__(?P<variant>g\d+))?"
                   r"__step(?P<step>\d+)__(?P<task>\w+)$")
 BASE = re.compile(r"^(?P<cfg>[\w.-]+?)__(?P<task>math500|aime|hmmt)$")
+TEACHER = re.compile(r"^(?P<cfg>.+?)__teacher__step(?P<step>\d+)__(?P<task>\w+)$")
 
 
 def main():
@@ -85,6 +95,25 @@ def main():
                 "no_answer_rate": s.get("no_answer_rate"),
                 "mean_gen_tokens": s.get("mean_gen_tokens"),
             }
+
+    # Teacher runs live one level deeper, under the run directory that also
+    # holds their transcripts and per-step reference tests.
+    for f in sorted(outdir.glob("frontier-model/*/final_eval/*/summary.json")):
+        m = TEACHER.match(f.parent.name)
+        if not m or m["task"] not in HEADLINE:
+            continue
+        s_ = json.loads(f.read_text())
+        metric = HEADLINE[m["task"]]
+        points[(m["cfg"], "teacher", "", m["task"])].append({
+            "step": int(m["step"]) + 1,          # loop index 0-based -> steps taken
+            "rollouts": (int(m["step"]) + 1) * ROLLOUTS_PER_STEP,
+            "score": s_.get(metric),
+            "stderr": s_.get(f"{metric}_stderr"),
+            "pass@1": s_.get("pass@1"),
+            "truncation_rate": s_.get("truncation_rate"),
+            "no_answer_rate": s_.get("no_answer_rate"),
+            "mean_gen_tokens": s_.get("mean_gen_tokens"),
+        })
 
     series = []
     for (cfg, band, variant, task), pts in sorted(points.items()):
