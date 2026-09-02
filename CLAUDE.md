@@ -33,6 +33,27 @@ grade differently.
 Do not add matplotlib. Figures are hand-written SVG (`src/render_report.py`)
 precisely so rendering never touches an environment that running jobs depend on.
 
+## verl's source
+
+The environment runs verl 0.9.0 from a PyPI wheel, which records no commit. It is
+tag `v0.9.0`, commit `483b8a0` of `verl-project/verl` — verified rather than
+assumed, all 362 `.py` files sha256-identical to the installed package.
+
+`package/verl.lock` holds that pin and is tracked. The source is not: 8.3 MB
+across 362 files would bury this repository's own history in `git log` and
+`git grep`, and the pin reconstructs it exactly.
+
+```bash
+scripts/fetch_verl_source.sh            # fetch into package/ (gitignored), then verify
+scripts/fetch_verl_source.sh --verify   # verify only
+```
+
+The fetched tree is a **read-only snapshot**. Python imports verl from
+site-packages, so editing it changes nothing — the failure mode is patching it
+and wondering why nothing happens. To modify verl: patch, reinstall, update the
+pin, re-run `--verify`. That check is the point of the pin; run it after any
+environment change.
+
 ## Running things
 
 ```bash
@@ -70,6 +91,14 @@ Each of these cost hours. They are in `docs/experiment.md` with the evidence.
 - **Pushing a fix is not delivering it.** Orchestrators `git checkout` once at
   startup and never re-sync. A converter fix reached the repo 40 minutes before
   the run it would have saved, and that run still died on the old code.
+- **`git checkout origin/main -- <paths>` does not move HEAD.** It is the right
+  way to sync a node mid-run — it touches only the paths you name, leaving
+  `outputs/` alone — but the node's `git log` then reports a commit from before
+  the sync, and any path you never named is simply absent. All three nodes ended
+  up 24–33 commits behind with three different versions of one file. Bring a node
+  forward with `git reset origin/main` (mixed) plus a checkout of the non-output
+  paths; **never `git reset --hard`**, which reverts the 440 result files in
+  `outputs/` — that is how a set of Llama baselines was lost once already.
 - **Difficulty bands are measured at n=8 or n=32, and training samples G=32
   fresh each step.** "Never solved in 8 samples" is not "never solved": at a true
   rate of 4.7%, eight samples miss it 68% of the time. Measured, the p=0 bands
