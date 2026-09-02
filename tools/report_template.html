@@ -109,6 +109,11 @@ tr.variant td:nth-child(2){font-style:italic}
 .line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .dot{stroke:var(--surface);stroke-width:1.6}
 .endlab{font-size:9.5px;font-weight:700}
+/* Section 2 reads teacher-against-field: the bands recede so one line carries
+   the eye. Opacity, not a grey, so each band keeps its identity from section 1. */
+.line.ctx{opacity:.34;stroke-width:1.5}
+circle.dot.ctx{opacity:.34}
+text.endlab.ctx{opacity:.5;font-weight:500}
 .stop{fill:none;stroke:var(--ink-3);stroke-width:1.4;stroke-dasharray:2 2}
 .s0{stroke:var(--s0)} circle.s0{fill:var(--s0)} text.s0{fill:var(--s0);stroke:none}
 .s1{stroke:var(--s1)} circle.s1{fill:var(--s1)} text.s1{fill:var(--s1);stroke:none}
@@ -198,7 +203,7 @@ no teacher: the control that a teacher-side method has to beat.</p>
 
 <div class="legend">
   <span class="key kT"><i class="swatch"></i> teacher — curriculum written per step</span>
-  <span style="color:var(--ink-3)">bands as above, unchanged</span>
+  <span style="color:var(--ink-3)">dashed and faded = the same five bands as above, now the field being read against</span>
 </div>
 
 <div class="gridwrap">

@@ -73,6 +73,12 @@ def panel(series, task, cfg, teacher=False):
     9.6% on non-thinking, about half their groups carrying gradient), and p=1
     gains +3.7 on MATH-500. Five bands, one axis, hardest to easiest. A stroke
     style that contradicts the result is a claim, not a decoration.
+
+    With `teacher=True` that reverses, and for a different reason: the bands are
+    no longer the subject but the field the teacher is being read against, so
+    all five recede together into dashed, muted context and the teacher alone is
+    drawn solid. Uniformly all five -- singling any of them out would be the
+    claim the paragraph above rejects.
     """
     # The matched-group-size controls are in the table, not here. Drawn as a
     # dashed twin of the band they re-run, they doubled the number of lines in
@@ -128,9 +134,13 @@ def panel(series, task, cfg, teacher=False):
             continue
         d = " ".join(f'{"M" if i == 0 else "L"}{X(x):.1f},{Y(y):.1f}'
                      for i, (x, y) in enumerate(pts))
-        out.append(f'<path class="line s{slot}" d="{d}"/>')
+        ctx = teacher and role != "teacher"
+        cls = f"line s{slot}" + (" ctx" if ctx else "")
+        dash = ' stroke-dasharray="4 3.5"' if ctx else ""
+        out.append(f'<path class="{cls}" d="{d}"{dash}/>')
         for x, y in pts:
-            out.append(f'<circle class="dot s{slot}" cx="{X(x):.1f}" cy="{Y(y):.1f}" r="3.2">'
+            out.append(f'<circle class="dot s{slot}{" ctx" if ctx else ""}" '
+                       f'cx="{X(x):.1f}" cy="{Y(y):.1f}" r="{2.4 if ctx else 3.2}">'
                        f'<title>{BAND_LABEL[role]} · {x:,} rollouts · {y:.1f}%</title></circle>')
         ex, ey = pts[-1]
         if not s.get("reaches_10240", True):
@@ -141,7 +151,7 @@ def panel(series, task, cfg, teacher=False):
             anchor = "end" if ex >= xmax else "start"
             labels.append({"x": X(ex) + (-4 if anchor == "end" else 4),
                            "y": Y(ey) - 6, "anchor": anchor, "slot": slot,
-                           "text": f"{sign}{abs(delta):.1f}"})
+                           "ctx": ctx, "text": f"{sign}{abs(delta):.1f}"})
 
     # Three lines that end at similar scores put their labels on top of each
     # other - 10 collisions across 5 panels before this. Dodge vertically:
@@ -168,7 +178,7 @@ def panel(series, task, cfg, teacher=False):
             for l in labels:
                 l["y"] += under
     for l in labels:
-        out.append(f'<text class="endlab s{l["slot"]}" x="{l["x"]:.1f}" '
+        out.append(f'<text class="endlab s{l["slot"]}{" ctx" if l.get("ctx") else ""}" x="{l["x"]:.1f}" '
                    f'y="{l["y"]:.1f}" text-anchor="{l["anchor"]}">{l["text"]}</text>')
     out.append("</svg>")
     return '<div class="panel">' + "".join(out) + "</div>"
