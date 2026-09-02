@@ -432,9 +432,8 @@ class Orchestrator:
         return stats
 
     def _stub_eval(self, step, sub_dir, latest_ckpt):
-        """No-GPU: exercise config.eval.yaml build + synthetic summary/records."""
+        """No-GPU: synthesise a summary/records pair with the real schema."""
         step_data = sub_dir / "data.jsonl"
-        tools.write_eval_config(sub_dir, step, latest_ckpt, self.config, step_data, ROOT)
         rows = protocol.read_jsonl(step_data)
         recs = [{**r, "n": 4, "c": 4,
                  "samples": [{"correct": True, "extracted": r["answer"],

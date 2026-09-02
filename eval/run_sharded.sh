@@ -56,6 +56,11 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
     tag="${EXP}__step${step}"
     summary="outputs/${tag}__${task}.summary.json"
     [ -f "$summary" ] && { echo "  skip (done) step $step / $task"; continue; }
+    # One config per (checkpoint, benchmark), derived from the base; see
+    # eval/make_config.py for why the base is not overridden on the fly.
+    cfgfile="logs/cfg__${tag}__${task}.yaml"
+    python eval/make_config.py --base "configs/eval/${CFG}__${task}.yaml" \
+      --model "$d" --model-label "$tag" --out "$cfgfile" >/dev/null
     echo "  === step $step / $task across $NGPU GPUs  $(date -u +%H:%M:%S)Z ==="
 
     # Two rounds. A shard that dies at engine init - which happens when a
@@ -73,9 +78,8 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
       pids=()
       for g in $missing; do
         CUDA_VISIBLE_DEVICES=$g VLLM_LOGGING_LEVEL=WARNING \
-          python eval/evaluate.py --config "configs/eval/${CFG}__${task}.yaml" \
-            --model "$d" --name "$tag" --shard "$g" --num-shards "$NGPU" \
-            \
+          python eval/evaluate.py --config "$cfgfile" \
+            --shard "$g" --num-shards "$NGPU" \
             > "logs/eval__${tag}__${task}__s${g}.log" 2>&1 &
         pids+=($!)
       done

@@ -64,9 +64,15 @@ run_one () {   # gpu step task dir
   local summary="outputs/${tag}__${task}.summary.json"
   [ -f "$summary" ] && { echo "  skip (done) step $step / $task"; return 0; }
 
+  # One config per (checkpoint, benchmark), derived from the base. `--config X
+  # --model Y` is refused by design, and this leaves a record of exactly what
+  # was evaluated beside the results.
+  local cfgfile="logs/cfg__${tag}__${task}.yaml"
+  python eval/make_config.py --base "configs/eval/${CFG}__${task}.yaml" \
+    --model "$dir" --model-label "${tag%__*}__${tag##*__}" --out "$cfgfile" >/dev/null
+
   CUDA_VISIBLE_DEVICES=$gpu VLLM_LOGGING_LEVEL=WARNING \
-    python eval/evaluate.py --config "configs/eval/${CFG}__${task}.yaml" \
-      --model "$dir" --name "$tag" \
+    python eval/evaluate.py --config "$cfgfile" \
       > "logs/eval__${tag}__${task}.log" 2>&1 &
   local pid=$!
   local waited=0

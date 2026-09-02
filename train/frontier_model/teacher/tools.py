@@ -223,45 +223,10 @@ def _parse_verl_metrics(log_path):
     return {}
 
 
-def _data_file_rel_to_data(step_data, repo_root):
-    """evaluate.py resolves a task's data_file under ROOT/data/<name>, so express
-    the workspace data.jsonl relative to that dir (a `..`-prefixed path). No
-    symlink and no edit to evaluate.py required."""
-    return os.path.relpath(Path(step_data).resolve(), (repo_root / "data").resolve())
 
 
 # ------------------------------------------------------------------ evaluation
 
-def write_eval_config(step_dir, step, model_path, config, step_data, repo_root,
-                      action_index=0):
-    """Clone the teacher_eval task template into a full evaluate.py config whose
-    single task points at this sub-action's data.jsonl. Does NOT touch configs/*."""
-    base = dict(config.get("eval_base", {}))
-    tmpl = dict(config["teacher_eval"])
-    data_rel = _data_file_rel_to_data(step_data, repo_root)
-    cfg = {
-        "name": f"teacher_step{step}_eval{action_index}",
-        "model": str(model_path),
-        "temperature": base.get("temperature", 0.6),
-        "top_p": base.get("top_p", 0.9),
-        "top_k": base.get("top_k", -1),
-        "seed": base.get("seed", 1234),
-        "tensor_parallel_size": base.get("tensor_parallel_size", 1),
-        "gpu_memory_utilization": base.get("gpu_memory_utilization", 0.90),
-        "tasks": {
-            "teacher_eval": {
-                "n": tmpl.get("n", 4),
-                "max_tokens": tmpl.get("max_tokens", 4096),
-                "max_model_len": tmpl.get("max_model_len", 8192),
-                "data_file": data_rel,
-                "integer_answer": tmpl.get("integer_answer", False),
-                "headline_metric": "pass@1",
-            }
-        },
-    }
-    path = Path(step_dir) / "config.eval.yaml"
-    protocol.atomic_write_text(path, yaml.safe_dump(cfg, sort_keys=False))
-    return path
 
 
 def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
@@ -270,22 +235,34 @@ def run_evaluation(step_dir, step, model_path, config, repo_root, timeout_s,
 
     `step_dir` is this eval sub-action's own dir (step_<N>/eval_<M>/). Reuses
     evaluate.py unmodified: `--limit 0` (uncapped); generations are always saved,
-    `--out step_dir`, `--name teacher_step<N>_eval<M>`. Copies the tag-named
+    `--out step_dir`, tagged teacher_step<N>_eval<M>. Copies the tag-named
     summary/records to the canonical eval.summary.json / eval.records.jsonl in the
     sub-action dir. Returns a dict of eval stats (weights unchanged).
     """
     step_dir = Path(step_dir)
     step_data = step_dir / "data.jsonl"
-    eval_cfg = write_eval_config(step_dir, step, model_path, config, step_data,
-                                 repo_root, action_index)
     name = f"teacher_step{step}_eval{action_index}"
     tag = f"{name}__teacher_eval"
 
+    # Pure command line: the teacher writes fresh data every step, so there is
+    # no config to point at and nothing to register. Passing --config as well
+    # would be refused - a config and the command line are two ways to describe
+    # one run, not layers.
+    tmpl = dict(config.get("teacher_eval", {}))
+    base = dict(config.get("eval_base", {}))
     argv = [
         "python", str(EVAL_DIR / "evaluate.py"),
-        "--config", str(eval_cfg),
         "--model", str(model_path),
-        "--name", name,
+        "--model-label", name,
+        "--data", str(step_data),
+        "--label", "teacher_eval",
+        "--samples", str(tmpl.get("n", 4)),
+        "--verifier", tmpl.get("verifier", "symbolic"),
+        "--max-tokens", str(tmpl.get("max_tokens", 4096)),
+        "--max-model-len", str(tmpl.get("max_model_len", 8192)),
+        "--temperature", str(base.get("temperature", 0.6)),
+        "--top-p", str(base.get("top_p", 0.9)),
+        "--top-k", str(base.get("top_k", -1)),
         "--limit", "0",
         "--out", str(step_dir),
     ]
