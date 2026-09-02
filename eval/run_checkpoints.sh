@@ -31,7 +31,12 @@ case "$CFG" in
   *)       JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"  ;;
 esac
 EXP="${CFG}__${BAND}${TAG:-}"
-CKROOT="$REPO/outputs/checkpoints/$EXP"
+# Checkpoints are node-local and must stay that way. outputs/ is now a symlink
+# to the shared bucket, so writing 26 GB of weights per checkpoint there would
+# push them over a fuse mount for no benefit: they are written, evaluated on the
+# same node, and deleted, and no other node ever reads them.
+CKROOT_BASE="$REPO/.local_checkpoints"
+CKROOT="$CKROOT_BASE/$EXP"
 TASKS="math500 aime hmmt"
 mkdir -p logs outputs
 # Checkpoint evaluations were writing verdicts but not reasoning. The records

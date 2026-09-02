@@ -102,7 +102,12 @@ EXP="${CFG}__${BAND}${TAG:-}"
 # writes over the rclone bucket mount. The orchestrator evaluates each run's
 # checkpoints on the same node and deletes them before the next run starts;
 # per-run peak is 4 x 26 GB = 104 GB against 174 GB free.
-CKPT="$REPO/outputs/checkpoints/$EXP"
+# Checkpoints are node-local and must stay that way. outputs/ is now a symlink
+# to the shared bucket, so writing 26 GB of weights per checkpoint there would
+# push them over a fuse mount for no benefit: they are written, evaluated on the
+# same node, and deleted, and no other node ever reads them.
+CKROOT_BASE="$REPO/.local_checkpoints"
+CKPT="$CKROOT_BASE/$EXP"
 
 # Start from the base model, always. verl's default resume_mode=auto silently
 # picks up whatever checkpoint directory it finds and continues from it - which

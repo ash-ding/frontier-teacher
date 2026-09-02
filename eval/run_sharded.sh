@@ -22,7 +22,12 @@ conda activate frontier-teacher
 
 CFG="${1:?}"; BAND="${2:?}"; NGPU="${3:-8}"; SUF="${4:-}"
 EXP="${CFG}__${BAND}${SUF}"
-CKROOT="$REPO/outputs/checkpoints/$EXP"
+# Checkpoints are node-local and must stay that way. outputs/ is now a symlink
+# to the shared bucket, so writing 26 GB of weights per checkpoint there would
+# push them over a fuse mount for no benefit: they are written, evaluated on the
+# same node, and deleted, and no other node ever reads them.
+CKROOT_BASE="$REPO/.local_checkpoints"
+CKROOT="$CKROOT_BASE/$EXP"
 TASKS="math500 aime hmmt"
 mkdir -p logs outputs
 # Checkpoint evaluations were writing verdicts but not reasoning. The records
