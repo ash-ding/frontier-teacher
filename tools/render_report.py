@@ -173,7 +173,7 @@ def main():
     if stats_path.exists():
         for r in json.loads(stats_path.read_text()):
             stats[(r["config"], r["band"], r["variant"], r["task"], r["metric"])] = r
-    body = Path(str(ROOT / "src" / "report_template.html")).read_text()
+    body = Path(str(ROOT / "tools" / "report_template.html")).read_text()
 
     grid = []
     for tkey, tname, metric, kind in TASKS:
@@ -223,8 +223,8 @@ def main():
     evals = sum(len([q for q in x["points"] if q["rollouts"] > 0]) for x in series)
     body = body.replace("<!--NRUNS-->", f"{len(runs) - ctrls}+{ctrls}")
     body = body.replace("<!--NEVALS-->", str(evals))
-    body = body.replace("<!--FINDINGS-->", Path(ROOT / "src" / "report_findings.html").read_text())
-    body = body.replace("<!--CAVEATS-->", Path(ROOT / "src" / "report_caveats.html").read_text())
+    body = body.replace("<!--FINDINGS-->", Path(ROOT / "tools" / "report_findings.html").read_text())
+    body = body.replace("<!--CAVEATS-->", Path(ROOT / "tools" / "report_caveats.html").read_text())
     Path(a.out).write_text(body)
     print(f"wrote {a.out}  ({len(body):,} bytes, {len(series)} series)")
 
