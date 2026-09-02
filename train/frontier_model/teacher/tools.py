@@ -31,7 +31,23 @@ ROOT = Path(__file__).resolve().parent.parent.parent.parent
 # src/ split into eval/ (measurement) and train/ (learning) - this module
 # reuses the evaluation harness unmodified, so it points at eval/.
 EVAL_DIR = ROOT / "eval"
-SCRIPTS = ROOT / "scripts"
+FM_DIR = ROOT / "train" / "frontier_model"   # the converter and run_teacher_step.sh
+
+
+def teacher_convert(rows):
+    """The teacher-data converter, loaded by path rather than by module name.
+
+    train/frontier_model/ and train/grpo/ both hold a to_verl_dataset.py; an
+    `import to_verl_dataset` would pick whichever sys.path entry came first, and
+    the two disagree about where ground truth comes from (teacher-authored vs.
+    verified). Naming the file removes the ambiguity.
+    """
+    import importlib.util
+    src = FM_DIR / "to_verl_dataset.py"
+    spec = importlib.util.spec_from_file_location("teacher_to_verl_dataset", src)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.convert(rows)
 
 
 # ----------------------------------------------------------- read-only context
@@ -306,7 +322,8 @@ def run_train(step_dir, step, model_path, config, repo_root, timeout_s, n_gpus,
     """One real GRPO update on the teacher's problems.
 
     Truncate data.jsonl to the first `max_problems` rows -> convert via
-    to_verl_teacher_dataset (teacher answer -> ground_truth, NO verification) ->
+    train/frontier_model/to_verl_dataset.py (teacher answer -> ground_truth, NO
+    verification) ->
     run_teacher_step.sh for one optimizer step on the latest checkpoint. Saves the
     hf checkpoint, deletes the FSDP world-size shards, and returns the advanced
     checkpoint path.
@@ -318,16 +335,13 @@ def run_train(step_dir, step, model_path, config, repo_root, timeout_s, n_gpus,
 
     # convert in-process (deterministic, no subprocess) so a converter error is a
     # clean ProtocolError rather than a shell exit code.
-    import sys
-    sys.path.insert(0, str(EVAL_DIR))
-    from to_verl_teacher_dataset import convert  # noqa: E402
-    verl_rows = convert(rows)
+    verl_rows = teacher_convert(rows)
     train_file = step_dir / "train.verl.jsonl"
     protocol.atomic_write_jsonl(train_file, verl_rows)
 
     ckpt_dir = step_dir / "ckpt"
     argv = [
-        "bash", str(SCRIPTS / "run_teacher_step.sh"),
+        "bash", str(FM_DIR / "run_teacher_step.sh"),
         config.get("grpo_config", "llama32-3b"),
         str(train_file), str(model_path), str(ckpt_dir), str(n_gpus),
     ]
