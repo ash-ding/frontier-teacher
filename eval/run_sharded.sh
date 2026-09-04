@@ -11,6 +11,10 @@
 # work is ~7 / 26 / 41 min with nothing idle.
 #
 #   eval/run_sharded.sh <config-name> <band-slug> [n_gpus] [tag-suffix]
+#
+# CKROOT, OUTROOT and TASKS override where it looks, where it writes and what it
+# runs -- which is how a teacher run is evaluated, its checkpoints being one
+# directory deeper and all named global_step_1.
 set -u
 cd "$(dirname "$0")/.."
 REPO="$PWD"
@@ -19,8 +23,9 @@ conda activate frontier-teacher
 
 CFG="${1:?}"; BAND="${2:?}"; NGPU="${3:-8}"; SUF="${4:-}"
 EXP="${CFG}__${BAND}${SUF}"
-CKROOT="$REPO/.local_checkpoints/$EXP"       # node-local; see run_checkpoints.sh
-TASKS="math500 aime hmmt"
+CKROOT="${CKROOT:-$REPO/.local_checkpoints/$EXP}"   # node-local; see run_checkpoints.sh
+OUTROOT="${OUTROOT:-outputs/grpo}"
+TASKS="${TASKS:-math500 aime hmmt}"
 mkdir -p logs
 [ -d "$CKROOT" ] || { echo "no checkpoints at $CKROOT"; exit 1; }
 
@@ -36,11 +41,17 @@ wait_gpus_free () {
   echo "  WARNING: GPUs still busy after 10 min, launching anyway"
 }
 
-for d in "$CKROOT"/global_step_*/actor/huggingface; do
+# Two layouts, as in run_checkpoints.sh: a GRPO run keeps global_step_<N>/ side
+# by side; a teacher run gives each step its own step_<N>/ holding global_step_1.
+for d in "$CKROOT"/global_step_*/actor/huggingface \
+         "$CKROOT"/step_*/global_step_*/actor/huggingface; do
   [ -f "$d/config.json" ] || continue
-  step=$(echo "$d" | sed -E 's|.*/global_step_([0-9]+)/.*|\1|')
+  case "$d" in
+    */step_*/global_step_*) step=$(echo "$d" | sed -E 's|.*/step_([0-9]+)/global_step_.*|\1|') ;;
+    *)                      step=$(echo "$d" | sed -E 's|.*/global_step_([0-9]+)/.*|\1|') ;;
+  esac
   for task in $TASKS; do
-    od="outputs/grpo/${EXP}__step${step}__${task}"
+    od="${OUTROOT}/${EXP}__step${step}__${task}"
     [ -f "$od/summary.json" ] && { echo "  skip (done) step $step / $task"; continue; }
     echo "  === step $step / $task across $NGPU GPUs  $(date -u +%H:%M:%S)Z ==="
 
@@ -93,4 +104,4 @@ for d in "$CKROOT"/global_step_*/actor/huggingface; do
     fi
   done
 done
-echo "=== $EXP: $(ls -d outputs/grpo/${EXP}__step*/summary.json 2>/dev/null | wc -l) evaluations complete ==="
+echo "=== $EXP: $(ls -d ${OUTROOT}/${EXP}__step*/summary.json 2>/dev/null | wc -l) evaluations complete ==="

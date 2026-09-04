@@ -34,6 +34,17 @@ steps=$(ls -d "$RUN"/step_*/result.json 2>/dev/null | wc -l)
 echo "$(date +%H:%M:%S) run finished with $steps closed step(s)"
 [ "$steps" -lt 20 ] && echo "  NOTE: fewer than 20 steps -- this curve stops short of 10,240 rollouts"
 
+# One job per GPU is right when a job is minutes long. In thinking mode it is
+# not: a job is up to 1,488 generations of up to 30,000 reasoning tokens, which
+# run_sharded.sh's own header measures at 51 min / 3.5 h / 5.5 h on one card for
+# MATH-500 / AIME / HMMT. Calling run_checkpoints.sh for a thinking run cost two
+# HMMT evaluations to the four-hour timeout before this branch existed.
+case "$CFG" in
+  *think*) RUNNER=eval/run_sharded.sh ;;
+  *)       RUNNER=eval/run_checkpoints.sh ;;
+esac
+echo "$(date +%H:%M:%S) evaluating with $RUNNER"
+
 CKROOT="$REPO/.local_checkpoints/$RUN_NAME" \
 OUTROOT="$RUN/final_eval" \
-  bash eval/run_checkpoints.sh "$CFG" teacher "$NGPU"
+  bash "$RUNNER" "$CFG" teacher "$NGPU"
