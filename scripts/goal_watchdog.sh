@@ -25,7 +25,23 @@ say() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" >> "$LOG"; }
 CFG=$(ls "$RUNS"/*.pid 2>/dev/null | head -1 | xargs -r basename | sed 's/\.pid$//')
 [ -z "${CFG:-}" ] && { echo "no run on this node" > "$STATUS"; exit 0; }
 PID=$(cat "$RUNS/$CFG.pid" 2>/dev/null || echo 0)
-RUN=$(ls -dt "$OUT"/run_* 2>/dev/null | head -1)
+
+# $OUT is on the shared bucket and holds all three nodes' runs, so the newest one
+# is usually somebody else's. Match on grpo_preset, which is the config name.
+RUN=$(python3 - "$CFG" <<'PY'
+import json, pathlib, sys
+cfg = sys.argv[1]
+out = pathlib.Path.home() / "data/frontier-teacher/outputs/goal-teacher"
+for d in sorted(out.glob("run_*"), reverse=True):
+    try:
+        if json.loads((d / "pipeline" / "config.resolved.json").read_text()
+                      )["student"]["grpo_preset"] == cfg:
+            print(d)
+            break
+    except Exception:
+        pass
+PY
+)
 [ -z "${RUN:-}" ] && { echo "$CFG no-run-dir" > "$STATUS"; exit 0; }
 
 alive=no; kill -0 "$PID" 2>/dev/null && alive=yes
