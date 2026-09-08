@@ -298,8 +298,14 @@ equally so for every model.
 - **A post-cutoff contamination test.** The discriminating experiment described
   in §3. `MathArena/aime_2026` is the cheapest starting point: 30 problems, all
   integer answers, zero integration cost against the existing AIME task.
-- **Teacher-side training.** §7 is plain GRPO — the control that a teacher has to
-  beat. Nothing has yet used a frontier model's trajectories.
+- **A second seed for anything.** Every cell in §7 and §8 is n = 1. The AIME
+  variance note in §1 shows the harness alone moves a pass@4 by ±3 points, which
+  is the size of several effects reported here.
+- **Verification of the teacher's answers.** §8's reward target is whatever the
+  teacher wrote, unchecked. The key-error rate is unmeasured.
+- **An overlap check between the teacher's problems and the benchmarks.** §8
+  argues from three read curricula that the problems are new; it does not measure
+  it.
 
 ### A statistical limit worth stating before HMMT runs
 
@@ -582,3 +588,200 @@ response cap bites hardest on exactly the band whose behaviour the experiment is
 most trying to measure. At 12,288 that bite was 52%; at 32,768 it is 6%, and the
 low band's step-19 OOM is the same phenomenon arriving as a memory failure
 instead of a truncation.
+
+---
+
+## 8. The frontier model as teacher
+
+Three runs, one per student configuration, launched 2026-09-02. Claude
+(`claude-opus-4-8`, driven through `claude -p`) sits inside the GRPO loop and
+writes the training data. Everything §7 held fixed is still fixed: the student's
+released weights, G = 32, 16 problems per step, 512 rollouts per step, 20 steps,
+the same sampling parameters, the same eight GPUs, the same grader. **A teacher
+run and a §7 run differ in the problems and in nothing else**, which is what
+makes the two comparable at all.
+
+The teacher's only channel to the student is a file. Each turn it writes a
+`decision.json` naming `evaluation` or `train` and a `data.jsonl` of
+`{id, problem, answer}`. An evaluation grades the current checkpoint on problems
+the teacher just wrote and returns per-problem pass rates and the full
+generations; the step stays open and the teacher may look again. A train consumes
+exactly 16 problems, runs one GRPO update, and closes the step. No reasoning
+trace, no rationale and no logits reach the student — **whatever the student
+gains cannot be an imitation of the teacher's reasoning.** The `answer` field
+becomes the reward target directly, with no verification.
+
+The teacher also sees three reference sets after every update: 100 of MATH-500,
+30 of the 150 AIME problems, 19 of the 93 HMMT. Those are the problems it is
+allowed to know about, so every score below is reported on their **complements** —
+400 / 120 / 74 problems the teacher never saw. `tools/holdout_split.py` applies
+the same split to §7's runs, so the two are read on one basis.
+
+### Results: the teacher does not beat the best fixed band
+
+Held-out score at 10,240 rollouts, against the same student's untrained score.
+Rank is among the seven arms measured for that student — the five §7 bands, the
+matched-group-size control, and the teacher.
+
+**Llama-3.2-3B** — held-out baseline 38.9 / 12.7 / 1.0
+
+| | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
+|---|---|---|---|
+| teacher | 42.4 +3.5 (rank 6/7) | 12.3 −0.4 (rank **7/7**) | 1.6 +0.6 (rank 2/7) |
+| best fixed band | 45.6 +6.8 (medium, G=32) | 17.0 +4.3 (hard) | 2.3 +1.3 (medium) |
+
+**Qwen3-4B non-thinking** — held-out baseline 83.4 / 36.8 / 18.7
+
+| | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
+|---|---|---|---|
+| teacher | 87.2 +3.8 (rank 2/7) | 40.9 +4.0 (rank 2/7) | 22.3 +3.6 (rank 2/7) |
+| best fixed band | 88.2 +4.8 (medium, G=32) | 41.4 +4.6 (hard) | 23.5 +4.8 (hard) |
+
+**Qwen3-4B thinking** — held-out baseline 96.2 / 81.1 / 56.9
+
+| | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
+|---|---|---|---|
+| teacher | 96.0 −0.2 | 82.8 +1.7 (rank 1/7) | 55.7 −1.2 (rank 7/7) |
+| best fixed band | 96.3 +0.1 | 82.5 +1.4 | 58.0 +1.1 |
+
+**On no (student, benchmark) cell does the teacher produce the largest gain,
+except one where every arm is inside noise.** Its single first place is thinking
+AIME, where the spread across all seven arms is 2.2 points against a ±3.2 standard
+error. The pattern otherwise splits by student: on non-thinking the teacher is
+second of seven on all three benchmarks and within about a point of the best band
+each time; on Llama it is sixth, seventh and second, and its AIME result is the
+worst of the seven — one of three arms that end below where they started, and the
+lowest of them.
+
+Llama's teacher curve is the clearest statement of the problem, because it does
+not fail so much as peak and give back:
+
+| held-out, Llama | 0 | 2,560 | 5,120 | 7,680 | 10,240 |
+|---|---|---|---|---|---|
+| MATH-500 pass@1 | 38.9 | 41.4 | 42.9 | 42.4 | 42.4 |
+| AIME pass@4 | 12.7 | 14.0 | 14.5 | 13.9 | 12.3 |
+
+Both rise through 5,120 and then flatten or fall. Compare §7's hard band, which
+rose at all four checkpoints and was still rising at the budget's end. Only the
+non-thinking teacher run is monotone on its in-domain metric (83.4 → 85.2 → 85.1
+→ 86.1 → 87.2), and it is also the run whose AIME gain arrives entirely in the
+second half (36.8 → 36.1 → 35.6 → 38.5 → 40.9) — the same late-transfer shape §7
+found in all three non-thinking bands.
+
+### What the teacher actually chose, and why it probably explains the result
+
+The system prompt describes the mechanism, names `critic/advantages/max` as the
+signal for "whether any group carried gradient", and then says: *"No curriculum
+strategy is prescribed."* The `p(1-p)` argument that §7 uses to set group size is
+never stated. What the teacher did with that latitude is measurable — training
+reward is the fraction of the step's 512 rollouts that were correct, so it is a
+direct read of how hard the curriculum was **for the student that received it**:
+
+| training reward | first step | last step | mean | steps at `advantages/max` = 5.48 |
+|---|---:|---:|---:|---:|
+| Llama | 67.6% | 79.1% | **64.3%** | 9 / 20 |
+| non-thinking | 41.6% | 72.5% | **59.2%** | 3 / 20 |
+| thinking | 42.0% | 67.8% | **63.6%** | 3 / 20 |
+
+Two things follow. **The teacher settled around 60% and drifted upward**, ending
+20–30 points above where it started in every run; the curricula got easier
+relative to a student that was itself improving. And the strongest signal a group
+of 32 can carry — one success, `advantages/max` = 5.48 — appears on 3 of 20 steps
+for both Qwen runs, where §7 records it on nearly every step of every `p = 0`
+band.
+
+A 60% curriculum is not absurd; it is near §7's medium band, which is the best
+Llama cell on MATH-500. But it is chosen without the argument that would justify
+it, it is not held there, and on Llama the band that transferred to AIME was the
+hard one at 5–15%. **The teacher was not told that difficulty is the lever, and
+the evidence here is that it did not infer it.** That is a statement about this
+prompt and this teacher over 20 steps, not about what a frontier model could do
+if told.
+
+### The problems are written, not retrieved
+
+The curricula are not drawn from the 12k pool or the reference sets. Step 0 of
+the Llama run opens `"The sides of a triangle are 6, 25, and 29. Find its area."`
+(answer 60); step 19 is a number-theory set — `"Find the remainder when 2^2024 is
+divided by 7."`, `"If x + 1/x = 6, find x^3 + 1/x^3."` These are constructed items
+with the shape of textbook exercises.
+
+Across the three runs the teacher wrote **5,152 problems**: 1,661 for Llama,
+1,455 for non-thinking, 2,036 for thinking, of which 320 per run were training
+curricula and the rest were its own evaluations.
+
+**This has been read, not measured.** No overlap check against MATH-500, AIME or
+HMMT has been run, and until one is, "the teacher did not recall benchmark
+problems into the curriculum" rests on inspection of three files. It is the
+cheapest remaining objection to the whole result.
+
+### No sign that the visible reference sets leaked
+
+The teacher can read its 100 / 30 / 19 reference problems, so a curriculum aimed
+at them would move the seen scores and not the held-out ones. MATH-500 at 10,240
+rollouts:
+
+| | held-out (400) | seen (100) |
+|---|---|---|
+| Llama | 38.9 → 42.4 | 39.8 → 41.5 |
+| non-thinking | 83.4 → 87.2 | 82.8 → 86.3 |
+| thinking | 96.2 → 96.0 | 94.8 → 95.5 |
+
+The two move together, and if anything the held-out gain is the larger one. This
+is the absence of a specific failure, not evidence of good faith: a teacher with
+no strategy has no reason to target the reference set either.
+
+### Cost
+
+| | teacher wall clock | output tokens | teacher cost | GPU wall clock |
+|---|---:|---:|---:|---:|
+| Llama | 2.7 h | 702,426 | $50.45 | 1.7 h |
+| non-thinking | 2.3 h | 593,723 | $44.31 | 2.2 h |
+| thinking | 4.4 h | 1,171,642 | $78.65 | 22.0 h |
+| | | | **$173.42** | |
+
+Input tokens are negligible (834–1,370 per run) because the teacher reads the run
+directory with tools rather than being handed context. **The comparison this does
+not license is a compute-matched one.** A §7 band costs the GPU time and no API
+spend; the teacher adds $44–79 and, on the thinking run, 4.4 hours of serial turn
+latency. Whether $173 buys more than spending it on rollouts is not answerable
+from these runs.
+
+### What this section does not establish
+
+**No interval is bolded above, and that is deliberate.**
+`outputs/analysis/paired_stats.json` predates the teacher evaluations; the
+two-level bootstrap over problems and generations that §7's bold intervals depend
+on **has not been run for the teacher arm**. Every teacher number here is a point
+estimate with a per-point standard error: on the held-out sets these run ±0.8–2.1
+on MATH-500, ±2.6–4.1 on AIME and ±0.8–5.3 on HMMT, depending on the student.
+Several of the differences discussed — the 1-point gaps on non-thinking, the whole
+thinking row — are inside that. Read the ranks, not the decimals.
+
+Each cell is also n = 1, at 20 steps, with one teacher and one prompt. §7 already
+says this about the bands; it is more binding here, because a teacher run has a
+second source of variance the bands do not — the teacher's own sampling. Two runs
+of this identical setup could differ in what gets taught, and nothing here bounds
+that.
+
+### Operational record
+
+Both Llama and non-thinking halted once and were resumed; thinking ran 38 hours
+without a failure.
+
+| | step | error | resumed from |
+|---|---|---|---|
+| Llama | 4.0 (eval) | `evaluate.py produced no summary.json` | step 4, 5.7 min later |
+| non-thinking | 2.1 (train) | `train failed rc=1 timed_out=False hf_exists=False` | step 2, 3.6 min later |
+
+Both behaved as the loop is specified to: it halts on the first failure rather
+than retrying or best-effort parsing, and `--resume` rebuilds the position from
+the artifacts. Neither run fabricated a step, and the resumed runs re-materialised
+their `pipeline/` snapshot, leaving the superseded copy under its timestamp. The
+underlying cause of either failure was not diagnosed further; both look like
+single-job flakes rather than anything about the curriculum.
+
+The thinking run's 22.0 hours of GPU wall clock against 4.4 hours of teacher time
+is the same 32,768-token cap §7 describes, now applied to 73 evaluations the
+teacher chose to run — 3.7 per step against 2.0 for the other two students. The
+teacher's freedom to evaluate is the dominant cost term for that configuration.
