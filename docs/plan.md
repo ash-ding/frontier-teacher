@@ -32,24 +32,45 @@ sampling cannot. Do not put them in a plain GRPO run and expect anything.
 
 ---
 
-## 2. Teacher-side training — the actual experiment
+## 2. Teacher-side training — run, but not yet readable
 
-§1 is the control: plain GRPO, no teacher. Nothing in the repository has yet used
-a frontier model's trajectories, which is the question it exists to answer — and
-§1 now says something specific about where a teacher would have to help.
+Three teacher runs completed 2026-09-02/03, one per student configuration, and
+`docs/experiment.md` §8 has the design, the results and the operational record.
+The teacher supplies a **curriculum** — problems and answers only, no trajectory,
+no rationale, no logits — so what it changed cannot be imitation of its reasoning.
 
-Qwen3-4B in thinking mode moved on nothing, across three bands and three
-benchmarks, and the reason is structural rather than a tuning failure: **92.9% of
-the 12k pool produces no gradient for it at all**, because every rollout in the
-group is correct or every one is wrong. On-policy sampling can only teach what
-the model already sometimes gets right. Where it does not, the signal is not weak
-but absent — which is exactly the region a teacher's trajectory could supply.
+The result as it stands: on no (student, benchmark) cell does the teacher produce
+the largest gain, except thinking AIME where every arm is inside noise. It ranks
+2nd of seven on all three benchmarks for non-thinking, and 6th / 7th / 2nd for
+Llama. §8 also measures why, from training reward: the teacher settles near a 60%
+curriculum and lets it drift 20–30 points easier over the run, having never been
+told the `p(1-p)` argument that §1 uses to set group size.
 
-- [ ] Decide what the teacher supplies — full trajectories, hints, or a curriculum
-      over the bands — and which control curve each variant is measured against.
-- [ ] The `p = 0` subsets are the natural first target: 800 problems for Llama,
-      200 for thinking. Plain GRPO provably cannot use them, so any movement there
-      is attributable to the teacher rather than to more compute.
+- [ ] **Extend `tools/paired_stats.py` to the teacher arm. This blocks reading
+      §8 at all.** Every number in §8 is currently a point estimate with a
+      per-point standard error, and nothing in it is bolded, because the
+      two-level bootstrap §7's intervals depend on has never been run here. The
+      existing `outputs/analysis/paired_stats.json` is not merely stale — the
+      script **structurally cannot see these runs**: it globs `grpo/*/records.jsonl`
+      where the teacher evaluations are under `frontier-model/<run>/final_eval/`,
+      and its `CKPT` regex requires a band slug matching `pass1_*`, which
+      `..__teacher__step19__math500` is not. Re-running it unchanged reproduces
+      the same 108 cells. The fix is a second glob path and a widened regex; the
+      resampling itself needs no change, since teacher `records.jsonl` carries the
+      same `{id, n, c}` and the `benchmarks/<cfg>__<task>` baselines are shared.
+      No GPU. Until this is done, §8 supports rankings and not differences.
+- [ ] **The teacher's key-error rate.** Its `answer` becomes the reward target
+      unverified, so a wrong key trains the student toward a wrong answer. 320
+      training problems per run; grading them against an independent solve is
+      cheap and currently nobody knows the rate.
+- [ ] **Overlap between the teacher's problems and the benchmarks.** §8 argues
+      from three read curricula that the 5,152 problems are written rather than
+      recalled. It does not measure it, and a teacher that reproduced an AIME
+      problem into the curriculum would have leaked the evaluation.
+- [ ] The `p = 0` subsets remain the sharpest available test and were not used:
+      800 problems for Llama, 200 for thinking. Plain GRPO provably cannot use
+      them, so movement there is attributable to the teacher rather than to more
+      compute. (§7 revises "provably" — see §3 — but the asymmetry survives.)
 
 ---
 
