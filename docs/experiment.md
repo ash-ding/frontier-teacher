@@ -740,12 +740,19 @@ no strategy has no reason to target the reference set either.
 | thinking | 4.4 h | 1,171,642 | $78.65 | 22.0 h |
 | | | | **$173.42** | |
 
-Input tokens are negligible (834–1,370 per run) because the teacher reads the run
-directory with tools rather than being handed context. **The comparison this does
-not license is a compute-matched one.** A §7 band costs the GPU time and no API
-spend; the teacher adds $44–79 and, on the thinking run, 4.4 hours of serial turn
-latency. Whether $173 buys more than spending it on rollouts is not answerable
-from these runs.
+**The input-token column is 834–1,370 per run, and that is not the size of what
+the teacher was given.** Each turn is handed a task message built by
+`tools.render_context`, and the run directory keeps every one of them as
+`task_context.txt`: 1,985 characters at step 0, 74,237 at step 19, of which 79%
+is the verl metrics dictionary printed in full for every closed step. So the
+figure above is what the CLI reports, not what the model read, and it should not
+be used to argue anything about how the teacher gets its context. The runs' cost
+is dominated by output tokens either way.
+
+**The comparison this does not license is a compute-matched one.** A §7 band
+costs the GPU time and no API spend; the teacher adds $44–79 and, on the thinking
+run, 4.4 hours of serial turn latency. Whether $173 buys more than spending it on
+rollouts is not answerable from these runs.
 
 ### What this section does not establish
 
