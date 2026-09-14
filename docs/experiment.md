@@ -613,45 +613,65 @@ becomes the reward target directly, with no verification.
 
 The teacher also sees three reference sets after every update: 100 of MATH-500,
 30 of the 150 AIME problems, 19 of the 93 HMMT. Those are the problems it is
-allowed to know about, so every score below is reported on their **complements** —
-400 / 120 / 74 problems the teacher never saw. `tools/holdout_split.py` applies
-the same split to §7's runs, so the two are read on one basis.
+allowed to know about, so every score below is reported on their **complements**.
+It turned out to know about more than those (see "What the teacher read off
+disk" below), so the complements are further cleaned: any benchmark problem that
+**any** arm of a student trained on — a §7 band or the teacher — is removed from
+every arm of that student. That leaves 400 / 120 / 74 held-out problems for Llama,
+399 / 115 / 74 for non-thinking and 397 / 104 / 74 for thinking.
+`tools/holdout_split.py` and `tools/paired_stats.py --teacher --exclude
+outputs/analysis/benchmark_contamination.json` apply the same ids to §7's runs,
+so the two are read on one basis.
 
-### Results: the teacher does not beat the best fixed band
+### Results: the teacher cannot be told apart from the fixed bands, except where it is worse
 
-Held-out score at 10,240 rollouts, against the same student's untrained score.
-Rank is among the seven arms measured for that student — the five §7 bands, the
-matched-group-size control, and the teacher.
+Clean held-out score at 10,240 rollouts, against the same student's untrained
+score on the same problems. Rank is among the seven arms measured for that
+student — the five §7 bands, the matched-group-size control, and the teacher.
+Intervals are 95%, from the two-level bootstrap over problems and generations
+(6,000 resamples, `outputs/analysis/paired_stats_teacher_clean.json`).
 
 **Llama-3.2-3B** — held-out baseline 38.9 / 12.7 / 1.0
 
 | | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
 |---|---|---|---|
-| teacher | 42.4 +3.5 (rank 6/7) | 12.3 −0.4 (rank **7/7**) | 1.6 +0.6 (rank 2/7) |
-| best fixed band | 45.6 +6.8 (medium, G=32) | 17.0 +4.3 (hard) | 2.3 +1.3 (medium) |
+| teacher | 42.4 **+3.5 [0.2, 6.9]** (rank 6/7) | 12.3 −0.4 [−4.9, 4.1] (rank **7/7**) | 1.6 +0.6 [−1.6, 3.1] (rank 2/7) |
+| best fixed band | 45.6 **+6.8 [3.6, 10.1]** (medium, G=32) | 17.0 +4.3 [−0.8, 8.7] (hard) | 2.3 +1.3 [−1.4, 4.4] (medium) |
+| teacher − best band | **−3.2 [−6.2, −0.3]** | −4.7 [−8.9, 0.0] | −0.6 [−3.3, 1.8] |
 
-**Qwen3-4B non-thinking** — held-out baseline 83.4 / 36.8 / 18.7
-
-| | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
-|---|---|---|---|
-| teacher | 87.2 +3.8 (rank 2/7) | 40.9 +4.0 (rank 2/7) | 22.3 +3.6 (rank 2/7) |
-| best fixed band | 88.2 +4.8 (medium, G=32) | 41.4 +4.6 (hard) | 23.5 +4.8 (hard) |
-
-**Qwen3-4B thinking** — held-out baseline 96.2 / 81.1 / 56.9
+**Qwen3-4B non-thinking** — held-out baseline 83.5 / 36.8 / 18.7
 
 | | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
 |---|---|---|---|
-| teacher | 96.0 −0.2 | 82.8 +1.7 (rank 1/7) | 55.7 −1.2 (rank 7/7) |
-| best fixed band | 96.3 +0.1 | 82.5 +1.4 | 58.0 +1.1 |
+| teacher | 87.2 **+3.6 [1.6, 5.8]** (rank 2/7) | 40.5 +3.7 [−1.7, 9.1] (rank 1/7) | 22.3 +3.6 [−1.0, 8.3] (rank 2/7) |
+| best fixed band | 88.2 **+4.7 [2.3, 7.1]** (medium, G=32) | 40.2 +3.5 [−1.7, 8.9] (hard, 2nd) | 23.5 +4.8 [−0.3, 9.8] (hard) |
+| teacher − best band | −1.1 [−3.1, 1.1] | +0.3 [−5.1, 5.4] | −1.2 [−5.4, 3.0] |
 
-**On no (student, benchmark) cell does the teacher produce the largest gain,
-except one where every arm is inside noise.** Its single first place is thinking
-AIME, where the spread across all seven arms is 2.2 points against a ±3.2 standard
-error. The pattern otherwise splits by student: on non-thinking the teacher is
-second of seven on all three benchmarks and within about a point of the best band
-each time; on Llama it is sixth, seventh and second, and its AIME result is the
-worst of the seven — one of three arms that end below where they started, and the
-lowest of them.
+**Qwen3-4B thinking** — held-out baseline 96.2 / 80.4 / 56.9
+
+| | MATH-500 pass@1 | AIME pass@4 | HMMT pass@4 |
+|---|---|---|---|
+| teacher | 96.0 −0.2 [−1.4, 1.0] (rank 2/7, tied with `p = 1`) | 81.3 +0.9 [−2.4, 4.4] (rank 3/7) | 55.7 −1.2 [−5.0, 3.0] (rank 6/7) |
+| best fixed band | 96.3 +0.1 [−1.0, 1.3] (medium, G=32) | 82.5 +2.1 [−2.3, 6.0] (medium) | 58.0 +1.1 [−2.7, 5.2] (easy) |
+| teacher − best band | −0.3 [−1.6, 0.9] | −1.2 [−4.9, 3.4] | −2.3 [−6.2, 1.7] |
+
+**Of the 54 teacher-minus-band comparisons, one resolves against a real band and
+none in the teacher's favour.** The one is Llama MATH-500, where the teacher ends
+3.2 points below medium at G = 32. The only intervals that clear zero on the
+teacher's side are against the two degenerate bands on non-thinking MATH-500 —
+`p = 0` by +2.3 [0.5, 4.3] and `p = 1` by +3.1 [0.9, 5.2] — which is beating the
+controls, not the curricula. Llama AIME against the hard band, −4.7 [−8.9, 0.0],
+stops exactly at zero. Everything else, including every AIME and HMMT cell on
+both Qwen students, is inside its interval. Read as a whole: **at this budget the
+teacher is indistinguishable from choosing a fixed band, and on Llama it is below
+the good ones.**
+
+The ranks agree with that and say no more. The teacher's single first place is
+non-thinking AIME, 0.3 points ahead of the hard band against a ±4.2 standard error.
+Before the contaminated problems were removed its first place was thinking AIME
+instead; that one came from problems it trained on (below). On Llama it is sixth,
+seventh and second, and its AIME result is the worst of the seven — one of three
+arms that end below where they started, and the lowest of them.
 
 Llama's teacher curve is the clearest statement of the problem, because it does
 not fail so much as peak and give back:
@@ -663,9 +683,9 @@ not fail so much as peak and give back:
 
 Both rise through 5,120 and then flatten or fall. Compare §7's hard band, which
 rose at all four checkpoints and was still rising at the budget's end. Only the
-non-thinking teacher run is monotone on its in-domain metric (83.4 → 85.2 → 85.1
+non-thinking teacher run is monotone on its in-domain metric (83.5 → 85.2 → 85.3
 → 86.1 → 87.2), and it is also the run whose AIME gain arrives entirely in the
-second half (36.8 → 36.1 → 35.6 → 38.5 → 40.9) — the same late-transfer shape §7
+second half (36.8 → 36.1 → 34.9 → 38.5 → 40.5) — the same late-transfer shape §7
 found in all three non-thinking bands.
 
 ### What the teacher actually chose, and why it probably explains the result
@@ -698,38 +718,120 @@ the evidence here is that it did not infer it.** That is a statement about this
 prompt and this teacher over 20 steps, not about what a frontier model could do
 if told.
 
-### The problems are written, not retrieved
-
-The curricula are not drawn from the 12k pool or the reference sets. Step 0 of
-the Llama run opens `"The sides of a triangle are 6, 25, and 29. Find its area."`
-(answer 60); step 19 is a number-theory set — `"Find the remainder when 2^2024 is
-divided by 7."`, `"If x + 1/x = 6, find x^3 + 1/x^3."` These are constructed items
-with the shape of textbook exercises.
+### What the teacher read off disk
 
 Across the three runs the teacher wrote **5,152 problems**: 1,661 for Llama,
 1,455 for non-thinking, 2,036 for thinking, of which 320 per run were training
-curricula and the rest were its own evaluations.
+curricula and the rest were its own evaluations. An earlier version of this
+section called them "written, not retrieved" on the strength of reading three
+files. `tools/teacher_overlap.py` now measures it — normalised exact match, shared
+13-grams and exhaustive character similarity against MATH-500, AIME, HMMT and the
+12k pool, with every near-match read and judged (`outputs/analysis/teacher_overlap.json`).
+**Most of the curricula are written. Two runs also copied problems from files the
+teacher could read, and one of those copies reached held-out AIME.**
 
-**This has been read, not measured.** No overlap check against MATH-500, AIME or
-HMMT has been run, and until one is, "the teacher did not recall benchmark
-problems into the curriculum" rests on inspection of three files. It is the
-cheapest remaining objection to the whole result.
+The cause is the same in both: the prompt says the held-out sets are ones "you
+never see", and also that anything which is not the student is the teacher's to
+read. The benchmark files sit in `data/benchmark/` of the checkout the teacher
+runs from, beside the manifests that say which fifth is the reference. Nothing
+but the prompt stood between them.
 
-### No sign that the visible reference sets leaked
+- **Thinking, step 6 — 14 held-out AIME problems trained on.** In
+  `step_6/eval_0/teacher.log` the teacher `cd`s into `data/`, reads
+  `aime_ref30.manifest.json`, sets the 30 reference ids aside as the ones it may
+  not use, and loads the other 120 from `aime_20*.jsonl` as "clean". Thirty of
+  them became an evaluation probe with their benchmark ids intact; fourteen went
+  into the step's 16-problem training curriculum, verbatim, with the benchmark
+  answer (2020-11, 2020-21, 2021-11, 2021-19, 2022-05, 2022-15, 2022-19, 2022-23,
+  2023-04, 2023-13, 2023-21, 2024-17, 2024-21, 2024-26). Every thinking checkpoint
+  from step 9 on was trained on them. On those fourteen the teacher's student goes
+  83.6 → 91.2 pass@4 — but the easy band, which never saw them, reaches 90.7, so at
+  n = 14 memorisation cannot be separated from ordinary improvement. What can be
+  measured is the effect on the headline: on the uncleaned 120, thinking AIME read
+  82.8, +1.7, rank 1/7; with these problems removed it is the 81.3, +0.9, rank 3/7
+  in the table above.
+- **Non-thinking, steps 0–3 — the curriculum is the §7 pool.** All 64 training
+  problems in the first four steps, and 120 probes, are MATH pool items copied from
+  `data/further_improve/qwen3-4b-nothink/`, ids such as `mathtrain-03303` still
+  attached. For a fifth of the run the teacher was picking from the band files —
+  which also carry the student's measured pass rate on every problem — rather than
+  writing. This is not an evaluation leak, but it is not what a "teacher-written
+  curriculum" means either.
+- **Llama — reference-fifth paraphrases.** From step 12 two training problems
+  restate MATH-500 reference items (0215, "x² − x − 1 = 0, find x³ − 2x + 1"; and
+  0186, "for how many n > 1 is 2²⁴ a perfect nth power"), and four more reference
+  items appear verbatim in its step-12 probes. The held-out numbers are unaffected;
+  the seen column below is not.
+- **Nothing else reached training.** No HMMT problem appears anywhere. The one
+  held-out MATH-500 item in a teacher curriculum is a judged paraphrase on
+  non-thinking (0118). No logged tool call touched the network.
+
+The rest reads as written. Step 0 of the Llama run opens `"The sides of a triangle
+are 6, 25, and 29. Find its area."` (answer 60); step 19 is a number-theory set —
+`"Find the remainder when 2^2024 is divided by 7."`, `"If x + 1/x = 6, find x^3 +
+1/x^3."` Beyond the cases above, the near-matches are same-form exercises —
+reference items with the numbers changed, classics such as a telescoping log
+product in new wording — and none of the borderline ones reached a training step.
+
+**The bands are not entirely clean either.** The 12k pool's `orig_train` split
+contains nine AIME 2020 problems, eight verbatim, and the §7 band files for both
+Qwen students picked some of them up — non-thinking `p = 0` holds five, thinking's
+100-problem hard band three. Llama's pool is `orig_test` only and none of its
+bands is affected, including the hard band whose AIME transfer §7 reports; the
+non-thinking hard band is clean too. These ids are in the exclusion set above, which is
+why a band's clean number can differ from §7's. §7's own figures are on the full
+benchmarks and have not been re-scored.
+
+### The answer keys are right
+
+The teacher's `answer` becomes the reward target unverified, so a wrong key would
+train the student toward a wrong answer. `tools/teacher_keycheck.py` re-solved all
+960 training problems with `claude-sonnet-5` — a different model, no tools, key
+not shown — graded the solve against the key with the training grader, sent every
+disagreement to a blind adjudication, and gave the harder cases a Python check run
+in a network-less sandbox (`outputs/analysis/teacher_keycheck/`, $31.56 recorded).
+
+| | problems | agree | solver wrong | key judged wrong | wrong-key rate |
+|---|---:|---:|---:|---:|---|
+| Llama | 320 | 320 | 0 | 0 | 0% [0, 1.2] |
+| non-thinking | 320 | 313 | 6 | 1 | 0.3% [0.06, 1.8] |
+| thinking | 320 | 312 | 8 | 0 | 0% [0, 1.2] |
+
+"Agree" includes two answers the grader missed as equivalent and the five
+enumeration problems the solver timed out on, whose keys the Python check
+confirmed. "Solver wrong" is the adjudication's verdict. The Python check covered
+fourteen disagreements and upheld the key on all but the ambiguous one below,
+including one where it overturned an adjudication that had sided with the solver on
+a counting problem. The one
+key judged wrong is ambiguous rather than wrong: "44 candies, every kid at least 3,
+the largest number of kids given an equal number" is 14 if leftovers are allowed
+and 11 if not, and the key is the original MATH answer, from the pool rows above.
+**Across 960 problems the rate is 0.1% [0.02, 0.6]; wrong keys do not explain
+anything in this section.**
+
+The check did surface two grader false negatives, which bear on training reward in
+every arm, not only here: `\tan 75° = 2 + \sqrt{3}` fails against `2+\sqrt{3}`
+because of the Unicode degree sign (`^\circ` passes), and `x \geq 8` fails against
+`[8,\infty)`. How often a student wrote either has not been counted.
+
+### No sign that the visible reference sets were targeted
 
 The teacher can read its 100 / 30 / 19 reference problems, so a curriculum aimed
 at them would move the seen scores and not the held-out ones. MATH-500 at 10,240
 rollouts:
 
-| | held-out (400) | seen (100) |
+| | held-out (clean) | seen (100) |
 |---|---|---|
 | Llama | 38.9 → 42.4 | 39.8 → 41.5 |
-| non-thinking | 83.4 → 87.2 | 82.8 → 86.3 |
+| non-thinking | 83.5 → 87.2 | 82.8 → 86.3 |
 | thinking | 96.2 → 96.0 | 94.8 → 95.5 |
 
-The two move together, and if anything the held-out gain is the larger one. This
-is the absence of a specific failure, not evidence of good faith: a teacher with
-no strategy has no reason to target the reference set either.
+The two move together, and if anything the held-out gain is the larger one. The
+seen column is the full reference hundred, including the two items Llama trained
+on paraphrases of; removing them moves Llama's seen figures to 39.7 → 41.8. This is
+the absence of a systematic failure, not evidence of good faith, and the previous
+section shows that where the teacher did use benchmark files it went for the
+problems it believed were **not** the reference.
 
 ### Cost
 
@@ -756,14 +858,13 @@ rollouts is not answerable from these runs.
 
 ### What this section does not establish
 
-**No interval is bolded above, and that is deliberate.**
-`outputs/analysis/paired_stats.json` predates the teacher evaluations; the
-two-level bootstrap over problems and generations that §7's bold intervals depend
-on **has not been run for the teacher arm**. Every teacher number here is a point
-estimate with a per-point standard error: on the held-out sets these run ±0.8–2.1
-on MATH-500, ±2.6–4.1 on AIME and ±0.8–5.3 on HMMT, depending on the student.
-Several of the differences discussed — the 1-point gaps on non-thinking, the whole
-thinking row — are inside that. Read the ranks, not the decimals.
+**It does not establish that the teacher is worse than, or equal to, a fixed band
+in general.** The intervals above resolve one difference out of 54, and an
+interval that crosses zero is an absence of evidence at this n, not evidence of
+equality — on AIME and HMMT even the best bands' gains over the base model do not
+clear zero. The removal of contaminated problems changes no interval's verdict and
+two ranks; a stricter exclusion that also drops shared-setup items
+(`--exclude-level strict`) changes neither.
 
 Each cell is also n = 1, at 20 steps, with one teacher and one prompt. §7 already
 says this about the bands; it is more binding here, because a teacher run has a

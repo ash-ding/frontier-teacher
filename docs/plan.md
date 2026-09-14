@@ -32,45 +32,91 @@ sampling cannot. Do not put them in a plain GRPO run and expect anything.
 
 ---
 
-## 2. Teacher-side training — run, but not yet readable
+## 2. Teacher-side training — run and read
 
 Three teacher runs completed 2026-09-02/03, one per student configuration, and
 `docs/experiment.md` §8 has the design, the results and the operational record.
 The teacher supplies a **curriculum** — problems and answers only, no trajectory,
 no rationale, no logits — so what it changed cannot be imitation of its reasoning.
 
-The result as it stands: on no (student, benchmark) cell does the teacher produce
-the largest gain, except thinking AIME where every arm is inside noise. It ranks
-2nd of seven on all three benchmarks for non-thinking, and 6th / 7th / 2nd for
-Llama. §8 also measures why, from training reward: the teacher settles near a 60%
-curriculum and lets it drift 20–30 points easier over the run, having never been
-told the `p(1-p)` argument that §1 uses to set group size.
+The result as it stands, on held-out problems cleaned of everything any arm
+trained on: of 54 teacher-minus-band intervals, one resolves against a real band —
+Llama MATH-500, 3.2 points below medium at G = 32 — and none in the teacher's
+favour. At this budget the teacher cannot be told apart from choosing a fixed
+band. §8 also measures why it might not help, from training reward: the teacher
+settles near a 60% curriculum and lets it drift 20–30 points easier over the run,
+having never been told the `p(1-p)` argument that §1 uses to set group size.
 
-- [ ] **Extend `tools/paired_stats.py` to the teacher arm. This blocks reading
-      §8 at all.** Every number in §8 is currently a point estimate with a
-      per-point standard error, and nothing in it is bolded, because the
-      two-level bootstrap §7's intervals depend on has never been run here. The
-      existing `outputs/analysis/paired_stats.json` is not merely stale — the
-      script **structurally cannot see these runs**: it globs `grpo/*/records.jsonl`
-      where the teacher evaluations are under `frontier-model/<run>/final_eval/`,
-      and its `CKPT` regex requires a band slug matching `pass1_*`, which
-      `..__teacher__step19__math500` is not. Re-running it unchanged reproduces
-      the same 108 cells. The fix is a second glob path and a widened regex; the
-      resampling itself needs no change, since teacher `records.jsonl` carries the
-      same `{id, n, c}` and the `benchmarks/<cfg>__<task>` baselines are shared.
-      No GPU. Until this is done, §8 supports rankings and not differences.
-- [ ] **The teacher's key-error rate.** Its `answer` becomes the reward target
-      unverified, so a wrong key trains the student toward a wrong answer. 320
-      training problems per run; grading them against an independent solve is
-      cheap and currently nobody knows the rate.
-- [ ] **Overlap between the teacher's problems and the benchmarks.** §8 argues
-      from three read curricula that the 5,152 problems are written rather than
-      recalled. It does not measure it, and a teacher that reproduced an AIME
-      problem into the curriculum would have leaked the evaluation.
-- [ ] The `p = 0` subsets remain the sharpest available test and were not used:
-      800 problems for Llama, 200 for thinking. Plain GRPO provably cannot use
-      them, so movement there is attributable to the teacher rather than to more
-      compute. (§7 revises "provably" — see §3 — but the asymmetry survives.)
+- [x] **Extend `tools/paired_stats.py` to the teacher arm.** Done:
+      `--teacher` pairs each teacher endpoint with every band on held-out ids,
+      and `--exclude` drops each student's contaminated ids from all its arms.
+      Output in `outputs/analysis/paired_stats_teacher{,_clean}.json`; §8's tables
+      carry the intervals.
+- [x] **The teacher's key-error rate.** 0.1% [0.02, 0.6] across 960 training
+      problems, by independent solve, blind adjudication and a sandboxed Python
+      check (`tools/teacher_keycheck.py`). The one key judged wrong is an
+      ambiguous pool problem. Wrong keys do not explain §8.
+- [x] **Overlap between the teacher's problems and the benchmarks.** Measured by
+      `tools/teacher_overlap.py`, and it found what reading had missed: the
+      thinking run's step 6 trained on 14 held-out AIME problems copied from
+      `data/benchmark/`, non-thinking's first four steps are copied from the band
+      files, and the §7 band files for both Qwen students carry AIME 2020 problems
+      from the pool. `outputs/analysis/benchmark_contamination.json` is the
+      per-student exclusion set §8 is now scored on.
+- [ ] **Take the benchmarks out of the teacher's reach before any further teacher
+      run.** This is what let the step-6 copy happen, and the goal-directed arm
+      runs on the same harness. The prompt telling the teacher it "never sees" the
+      held-out sets is not a barrier while `data/benchmark/`, the reference
+      manifests and `data/further_improve/` (which also records the student's
+      measured pass rate per problem) are readable from its working directory.
+      Run the teacher from a directory that does not contain them — a separate
+      checkout without `data/`, or a sandbox that mounts only the run directory —
+      and make the audit in `tools/teacher_overlap.py` part of closing a run
+      rather than something done after the write-up.
+- [ ] **Two grader false negatives, in every arm's reward.** `\tan 75° = 2 +
+      \sqrt{3}` fails against `2+\sqrt{3}` (Unicode degree sign; `^\circ`
+      passes), and `x \geq 8` fails against `[8,\infty)`. Both surfaced in the
+      key check. Count how often students in the §7 and teacher runs produced
+      either before deciding whether it matters; a fix changes the grader that
+      training and evaluation share, so it re-opens every comparison it touches.
+- [ ] **The `p = 0` subsets as a teacher test — parked behind §3.** Not used:
+      800 problems for Llama, 700 for non-thinking, 200 for thinking. The case
+      for them was that plain GRPO cannot use a problem it never solves, so
+      movement there would be the teacher's rather than more compute's. That
+      premise is weaker than it reads. §7 ("The degenerate bands are not
+      degenerate") measured the `p = 0` bands training under plain GRPO anyway —
+      reward 1.4% → 6.3% for Llama, 4.7% → 9.6% for non-thinking, 0.4% → 1.8%
+      for thinking — so what survives is "harder for GRPO to use", not
+      "unusable". How much harder is what §3's n = 32 re-profile measures; do
+      that before deciding these subsets are worth a teacher run.
+
+      Where it stands (2026-09-14). No experiment was ever specified: "use them"
+      can mean evaluating teacher checkpoints on the subsets, or training a
+      teacher toward them.
+      - *Evaluating existing checkpoints* has nothing to compare against. §7's
+        band checkpoints are deleted, so a teacher's movement on `p = 0` has no
+        plain-GRPO reference beyond the base model. Of the open-ended teacher
+        runs only non-thinking (`run_20260902_072856`, lumen-2) and thinking
+        (`run_20260902_072857`, lumen-3) still have weights, at steps 4/9/14/19;
+        Llama's are gone.
+      - *Training toward unsolved problems* has in effect been run, in a sharper
+        form. The goal-directed arm (`train/goal_teacher/`,
+        `outputs/goal-teacher/run_20260908_*`) gave the teacher three problems
+        every student scored 0 on and twenty steps to move them. All three runs
+        stayed at 0 throughout, except one 1-of-8 hit on target 003 at step 6 of
+        the thinking run. Target 003 is Q1, one of the two the teacher model
+        itself solves on the MathArena record (`Claude-Opus-4.8 (max)` green;
+        Q3, the one it does not, never moved), so the hit says nothing about the
+        asymmetry the arm exists to observe. It did not recur in the thirteen
+        checkpoints after it, and the trace reads as a guess: the student moves
+        between several candidate values and boxes a different one at the end
+        of its thinking than in its answer. The key-free parts of
+        `tools/goal_audit.py` are clean on that run (no shared 13-grams, no
+        network calls); its answers check needs `GOAL_TEACHER_KEY` and has not
+        been run.
+      The goal targets are research problems, not these pool subsets, so the
+      arm does not close this item. It is the reason not to spend a teacher run
+      here before §3 says how many of these problems are really at 0.
 
 ---
 
